@@ -737,20 +737,17 @@
   // 定时刷新容器信息
   setInterval(() => { if (!document.hidden) loadContainerInfo(); }, 15000);
 
-  init();
-})();
-
-  // ---------- 网络与出网自检 ----------
+// ---------- 网络与出网自检 ----------
   function runNetworkCheck() {
     var box = document.getElementById('netCheckBox');
     if (!box) return;
     box.innerHTML = '<div class="empty">正在检测，请稍候...</div>';
     LXD.authRequest('/api/container/network-check').then(function (res) {
-      if (res.code !== 200) throw new Error(res.msg; '检测失败');
-      renderNetworkCheck(res.data; {});
+      if (res.code !== 200) throw new Error(res.msg || '检测失败');
+      renderNetworkCheck(res.data || {});
     }).catch(function (err) {
       if (LXD.handleAuthError(err)) return;
-      box.innerHTML = '<div class="empty">检测失败：' + LXD.esc(err.message; '') + '</div>';
+      box.innerHTML = '<div class="empty">检测失败：' + LXD.esc(err.message || '') + '</div>';
     });
   }
 
@@ -759,31 +756,35 @@
     if (!box) return;
     var labelMap = { ok: '出网正常', blocked: '无法访问公网', no_gateway: '网关不通', stopped: '容器未运行', error: '检测失败' };
     var colorMap = { ok: '#22c55e', blocked: '#f87171', no_gateway: '#fbbf24', stopped: '#94a3b8', error: '#f87171' };
-    var st = n.status; 'error';
+    var st = n.status || 'error';
     function flag(v) { return v === 'ok' ? '✅ 正常' : (v === 'fail' ? '❌ 失败' : '-'); }
-    var httpTxt = (!n.http_code; n.http_code === 'na')
+    var httpTxt = (!n.http_code || n.http_code === 'na')
       ? '未安装 curl（已用 TCP 探测代替）'
       : (n.http_code === '200' ? '✅ 200' : '⚠️ ' + LXD.esc(n.http_code));
     var rows = [
-      ['容器 IP', n.container_ip; '-'],
-      ['网关', n.gateway; '-'],
+      ['容器 IP', n.container_ip || '-'],
+      ['网关', n.gateway || '-'],
       ['网关连通', flag(n.gw_ping)],
       ['DNS 解析', flag(n.dns)],
       ['公网 TCP', flag(n.tcp_out)],
       ['HTTP 探测', httpTxt],
-      ['出网公网 IP', n.egress_ip; '-'],
-      ['宿主 MASQUERADE', n.masquerade ? ('✅ 已配置 ' + (n.bridge_cidr; '')) : ('❌ 缺失 ' + (n.bridge_cidr; ''))],
-      ['宿主 FORWARD 策略', n.forward_policy; '-'],
-      ['ip_forward', n.ip_forward === '1' ? '✅ 已开启' : ('❌ ' + (n.ip_forward; '-'))]
+      ['出网公网 IP', n.egress_ip || '-'],
+      ['宿主 MASQUERADE', n.masquerade ? ('✅ 已配置 ' + (n.bridge_cidr || '')) : ('❌ 缺失 ' + (n.bridge_cidr || ''))],
+      ['宿主 FORWARD 策略', n.forward_policy || '-'],
+      ['ip_forward', n.ip_forward === '1' ? '✅ 已开启' : ('❌ ' + (n.ip_forward || '-'))]
     ];
-    var html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:15px;font-weight:600;color:' + (colorMap[st]; '#94a3b8') + '">' + (labelMap[st]; st) + '</div>';
+    var html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:15px;font-weight:600;color:' + (colorMap[st] || '#94a3b8') + '">' + (labelMap[st] || st) + '</div>';
     html += '<div class="kv">';
     rows.forEach(function (r) {
       html += '<div class="kv-item"><div class="k">' + r[0] + '</div><div class="v">' + r[1] + '</div></div>';
     });
     html += '</div>';
     if (st !== 'ok') {
-      html += '<div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(248,113,113,.12);color:#f87171;font-size:13px;line-height:1.7">' + LXD.esc(n.hint; '') + '</div>';
+      html += '<div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(248,113,113,.12);color:#f87171;font-size:13px;line-height:1.7">' + LXD.esc(n.hint || '') + '</div>';
     }
     box.innerHTML = html;
   }
+
+  init();
+})();
+

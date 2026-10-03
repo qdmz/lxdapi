@@ -281,6 +281,47 @@ netfilter-persistent save
 
 ---
 
+## 十一、用户注册 / 邮箱激活 / 找回密码（v0.03）
+
+### 后台配置 SMTP
+
+管理后台 → **「邮件服务」**（`/admin/smtp`）：填写 SMTP 主机、端口（465=SSL，587=STARTTLS）、账号、授权码、发件地址/名称，勾选启用后可点"发送测试邮件"验证。
+
+邮件模板支持自定义，可用变量：`{{site}}`、`{{username}}`、`{{email}}`、`{{link}}`；**留空则使用系统默认模板**。
+
+### 用户流程
+
+1. **注册**：`/user/register`（用户名 + 邮箱 + 密码）→ 系统发送激活邮件
+2. **激活**：邮箱点击链接 → `/api/user/activate?token=xxx` → 跳转登录页提示激活成功
+3. **登录**：`/user/login`（用户名或邮箱 + 密码；老用户仍可用 API Key 登录）
+4. **找回密码**：`/user/forgot` → 邮件重置链接（24 小时有效）→ `/user/reset?token=xxx` 设置新密码
+
+### 实现要点
+
+- 密码使用 **bcrypt** 存储，`User` 表新增 `Email / PasswordHash / EmailVerified / ActivateToken / ResetToken / ResetExpire`
+- 注册后状态为 `pending`，未激活登录提示"邮箱未激活"
+- 未配置 SMTP 时注册返回"激活邮件发送失败"，此时管理员可在后台把用户状态改为 `active`
+- SMTP 配置与邮件模板存于 `system_settings` 表（KV）
+
+### 相关接口
+
+| 接口 | 说明 |
+|---|---|
+| `POST /api/user/register` | 注册并发送激活邮件 |
+| `GET /api/user/activate?token=` | 邮箱激活 |
+| `POST /api/user/forgot-password` | 发送重置链接 |
+| `POST /api/user/reset-password` | 用 token 重置密码 |
+| `GET/POST /api/admin/settings/smtp` | 后台读写 SMTP 与邮件模板 |
+| `POST /api/admin/settings/smtp/test` | 发送测试邮件 |
+
+---
+
+## 十二、版本
+
+- **v0.03** — 用户注册 / 邮箱激活 / 找回密码、SMTP 配置与邮件模板、后台邮件服务页面、一键部署脚本。
+
+---
+
 ## 八、版本
 
 - **v0.01** — 首个归档版本：后端 + 前端 + 部署配置，含容器管理、用户与配额、端口映射、Web 终端、重装系统、模板管理。

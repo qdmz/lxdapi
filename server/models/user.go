@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 import "gorm.io/gorm"
 
 type User struct {
@@ -27,5 +29,15 @@ type User struct {
 	ProcessesLimit    int
 	AllowNesting      bool
 	MemorySwap        bool
+
+	// 用户账号体系（注册 / 邮箱激活 / 找回密码）
+	Email         string     `gorm:"size:255;index"`
+	PasswordHash  string     `gorm:"size:255"`
+	EmailVerified bool       `gorm:"default:false"`
+	ActivateToken string     `gorm:"size:100;index"`
+	ResetToken    string     `gorm:"size:100;index"`
+	ResetExpire   *time.Time
+	RegisteredIP  string     `gorm:"size:64"`
+	LastLoginAt   *time.Time
 }
 

@@ -1,0 +1,131 @@
+{{template "admin/admin_header.html" .}}
+<div class="max-w-5xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+    <div class="mb-4 sm:mb-6">
+        <h1 class="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+            <span class="iconify" data-icon="mdi:email-outline" data-width="20"></span>邮件服务（SMTP）配置
+        </h1>
+        <p class="text-xs sm:text-sm text-gray-500 mt-1">用于用户注册激活、找回密码等邮件发送；模板留空则使用系统默认。可用变量：{{username}} {{email}} {{link}} {{site}}</p>
+    </div>
+    <div id="alertBox" class="hidden mb-4 text-sm rounded-lg px-3 py-2"></div>
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-5 mb-4">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">SMTP 服务器</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <label class="flex items-center gap-2 text-sm text-gray-700 sm:col-span-2">
+                <input type="checkbox" id="smtpEnabled" class="rounded border-gray-300"> 启用邮件服务
+            </label>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">SMTP 主机</div>
+                <input id="smtpHost" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="smtp.qq.com">
+            </div>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">端口（465=SSL，587=STARTTLS）</div>
+                <input id="smtpPort" type="number" value="465" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">账号</div>
+                <input id="smtpUser" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="you@example.com">
+            </div>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">密码 / 授权码</div>
+                <input id="smtpPass" type="password" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">发件地址</div>
+                <input id="smtpFrom" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="noreply@example.com">
+            </div>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">发件人名称</div>
+                <input id="smtpFromName" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="LXD 容器面板">
+            </div>
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-5 mb-4">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">邮件模板</h2>
+        <div class="space-y-4">
+            <div>
+                <div class="text-xs text-gray-600 mb-1">激活邮件 · 主题</div>
+                <input id="actSubject" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="【{{site}}】请激活你的账号">
+                <div class="text-xs text-gray-600 mt-2 mb-1">激活邮件 · 正文（支持 HTML）</div>
+                <textarea id="actBody" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono"></textarea>
+            </div>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">重置密码邮件 · 主题</div>
+                <input id="rstSubject" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="【{{site}}】重置密码">
+                <div class="text-xs text-gray-600 mt-2 mb-1">重置密码邮件 · 正文（支持 HTML）</div>
+                <textarea id="rstBody" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono"></textarea>
+            </div>
+        </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+        <button onclick="saveSettings()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">保存配置</button>
+        <div class="flex items-center gap-2">
+            <input id="testTo" class="px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="测试收件邮箱">
+            <button onclick="testMail()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition">发送测试邮件</button>
+        </div>
+        <span id="statusText" class="text-xs text-gray-500"></span>
+    </div>
+</div>
+<script>
+function showAlert(type, msg) {
+    var el = document.getElementById('alertBox');
+    el.className = 'mb-4 text-sm rounded-lg px-3 py-2 ' + (type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700');
+    el.textContent = msg;
+}
+function loadSettings() {
+    $.get('/api/admin/settings/smtp', function (r) {
+        if (r.code !== 200) { showAlert('error', r.msg || '加载失败'); return; }
+        var s = (r.data && r.data.smtp) || {};
+        var t = (r.data && r.data.templates) || {};
+        document.getElementById('smtpEnabled').checked = !!s.Enabled;
+        document.getElementById('smtpHost').value = s.Host || '';
+        document.getElementById('smtpPort').value = s.Port || 465;
+        document.getElementById('smtpUser').value = s.User || '';
+        document.getElementById('smtpFrom').value = s.From || '';
+        document.getElementById('smtpFromName').value = s.FromName || '';
+        document.getElementById('actSubject').value = t.activate_subject || '';
+        document.getElementById('actBody').value = t.activate_body || '';
+        document.getElementById('rstSubject').value = t.reset_subject || '';
+        document.getElementById('rstBody').value = t.reset_body || '';
+    });
+}
+function saveSettings() {
+    $.ajax({
+        url: '/api/admin/settings/smtp', type: 'POST', contentType: 'application/json',
+        data: JSON.stringify({
+            enabled: document.getElementById('smtpEnabled').checked,
+            host: document.getElementById('smtpHost').value,
+            port: parseInt(document.getElementById('smtpPort').value || '465', 10),
+            user: document.getElementById('smtpUser').value,
+            pass: document.getElementById('smtpPass').value,
+            from: document.getElementById('smtpFrom').value,
+            from_name: document.getElementById('smtpFromName').value,
+            activate_subject: document.getElementById('actSubject').value,
+            activate_body: document.getElementById('actBody').value,
+            reset_subject: document.getElementById('rstSubject').value,
+            reset_body: document.getElementById('rstBody').value
+        }),
+        success: function (r) {
+            if (r.code === 200) showAlert('success', '配置已保存');
+            else showAlert('error', r.msg || '保存失败');
+        },
+        error: function () { showAlert('error', '请求失败'); }
+    });
+}
+function testMail() {
+    var to = document.getElementById('testTo').value;
+    if (!to) { showAlert('error', '请填写测试收件邮箱'); return; }
+    document.getElementById('statusText').textContent = '发送中...';
+    $.ajax({
+        url: '/api/admin/settings/smtp/test', type: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ to: to }),
+        success: function (r) {
+            document.getElementById('statusText').textContent = '';
+            if (r.code === 200) showAlert('success', '测试邮件已发送，请查收');
+            else showAlert('error', r.msg || '发送失败');
+        },
+        error: function () { document.getElementById('statusText').textContent = ''; showAlert('error', '请求失败'); }
+    });
+}
+$(function () { loadSettings(); });
+</script>
+{{template "admin/admin_footer.html" .}}

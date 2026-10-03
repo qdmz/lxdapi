@@ -72,6 +72,7 @@ func Init() error {
 		&models.CacheAutoRefreshSettings{},
 		&models.StoragePool{},
 		&models.AccessToken{},
+		&models.SystemSetting{},
 	)
 }
 

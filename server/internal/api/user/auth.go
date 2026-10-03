@@ -127,6 +127,31 @@ func Login(c *gin.Context) {
 
 	session.Delete("user_captcha_id")
 
+	// 注册用户：邮箱 / 用户名 + 密码登录
+	if u, ok := passwordLogin(req.Username, req.Password); ok {
+		if !u.EmailVerified {
+			response.Error(c, 403, "邮箱未激活，请先到邮箱点击激活链接")
+			return
+		}
+		if u.Status != "active" {
+			response.Error(c, 403, "账户已被禁用，请联系管理员")
+			return
+		}
+		session.Set("user_logged_in", true)
+		session.Set("user_username", u.Username)
+		session.Set("user_id", u.ID)
+		if err := session.Save(); err != nil {
+			response.Error(c, 500, "登录失败")
+			return
+		}
+		userLoginAttempts.Lock()
+		delete(userLoginAttempts.attempts, clientIP)
+		userLoginAttempts.Unlock()
+		logger.OK("用户登录成功(密码): %s", u.Username)
+		response.Success(c, gin.H{"username": u.Username, "user_id": u.ID})
+		return
+	}
+
 	user, err := service.GetUserByUsernameAndAPIKey(req.Username, req.Password)
 	if err != nil {
 		errMsg := err.Error()

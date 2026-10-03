@@ -189,3 +189,9 @@ func ConsolePage(c *gin.Context) {
 	})
 }
 
+// AdminSMTPSettings 邮件服务配置页
+func AdminSMTPSettings(c *gin.Context) {
+	c.HTML(http.StatusOK, "admin/admin_smtp.html", utils.MergeTemplateData(c, gin.H{
+		"title": "邮件服务配置 - LXD API",
+	}))
+}

@@ -46,3 +46,25 @@ func UserContainerDetail(c *gin.Context) {
 		"name":     c.Query("name"),
 	}))
 }
+
+// UserRegisterPage 用户注册页
+func UserRegisterPage(c *gin.Context) {
+	c.HTML(http.StatusOK, "user/user_register.html", utils.MergeTemplateData(c, gin.H{
+		"title": "注册账号",
+	}))
+}
+
+// UserForgotPage 忘记密码页
+func UserForgotPage(c *gin.Context) {
+	c.HTML(http.StatusOK, "user/user_forgot.html", utils.MergeTemplateData(c, gin.H{
+		"title": "找回密码",
+	}))
+}
+
+// UserResetPage 重置密码页（携带 token）
+func UserResetPage(c *gin.Context) {
+	c.HTML(http.StatusOK, "user/user_reset.html", utils.MergeTemplateData(c, gin.H{
+		"title": "设置新密码",
+		"token": c.Query("token"),
+	}))
+}

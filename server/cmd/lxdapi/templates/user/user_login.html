@@ -126,6 +126,11 @@
                 登 录
             </button>
         </form>
+        <div class="mt-4 flex items-center justify-between text-sm">
+            <a href="/user/register" class="text-blue-600 hover:underline">没有账号？立即注册</a>
+            <a href="/user/forgot" class="text-gray-500 hover:underline">忘记密码？</a>
+        </div>
+        <div id="noticeBox" class="hidden mt-3 text-sm rounded-lg px-3 py-2"></div>
         <div class="mt-3 sm:mt-4 text-center text-xs text-gray-500">
             <p class="flex items-center justify-center gap-1 bg-blue-50 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-blue-100">
                 <span class="iconify text-blue-500" data-icon="mdi:information" data-width="12"></span>
@@ -224,5 +229,20 @@
         }
     </script>
     </div>
+<script>
+(function () {
+    var p = new URLSearchParams(location.search);
+    var box = document.getElementById('noticeBox');
+    var msg = '', ok = true;
+    if (p.get('activated')) { msg = '邮箱激活成功，请登录'; }
+    else if (p.get('activate_error') === 'invalid') { msg = '激活链接无效或已过期'; ok = false; }
+    else if (p.get('activate_error') === 'empty') { msg = '激活链接缺少参数'; ok = false; }
+    else if (p.get('activate_error') === 'failed') { msg = '激活失败，请联系管理员'; ok = false; }
+    if (msg && box) {
+        box.className = 'mt-3 text-sm rounded-lg px-3 py-2 ' + (ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700');
+        box.textContent = msg;
+    }
+})();
+</script>
 </body>
 </html>

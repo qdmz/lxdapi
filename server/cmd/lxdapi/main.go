@@ -350,6 +350,7 @@ func main() {
 		adminPages.GET("/dashboard", handlers.AdminDashboard)
 		adminPages.GET("/containers", handlers.AdminContainers)
 		adminPages.GET("/containers/:name", handlers.AdminContainerDetail)
+		adminPages.GET("/smtp", handlers.AdminSMTPSettings)
 		adminPages.GET("/users", handlers.AdminUsers)
 		adminPages.GET("/users/:id", handlers.AdminUserDetail)
 		adminPages.GET("/tasks", handlers.AdminTasks)
@@ -369,9 +370,16 @@ func main() {
 	
 	r.GET("/api/user/captcha", user.GetCaptcha)
 	r.POST("/api/user/login", user.Login)
+	r.POST("/api/user/register", user.Register)
+	r.GET("/api/user/activate", user.Activate)
+	r.POST("/api/user/forgot-password", user.ForgotPassword)
+	r.POST("/api/user/reset-password", user.ResetPassword)
 	r.POST("/api/user/logout", user.Logout)
 
 	r.GET("/user/login", handlers.UserLogin)
+	r.GET("/user/register", handlers.UserRegisterPage)
+	r.GET("/user/forgot", handlers.UserForgotPage)
+	r.GET("/user/reset", handlers.UserResetPage)
 	
 	userPages := r.Group("/user")
 	userPages.Use(middleware.UserPageAuth())
@@ -484,6 +492,9 @@ func main() {
 		adminAPI.GET("/network/nat", admin.GetNetworkNATStatus)
 		adminAPI.POST("/network/nat", admin.SetNetworkNATStatus)
 		adminAPI.POST("/network/fix-egress", admin.FixEgressNAT)
+		adminAPI.GET("/settings/smtp", admin.GetSMTPSettings)
+		adminAPI.POST("/settings/smtp", admin.SaveSMTPSettings)
+		adminAPI.POST("/settings/smtp/test", admin.TestSMTP)
 	}
 
 	userAPI := r.Group("/api/user")

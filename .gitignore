@@ -1,0 +1,29 @@
+# 编译产物
+server/lxdapi
+server/lxdapi-amd64
+server/lxdapi-arm64
+*.exe
+
+# 数据库（含真实业务数据，禁止入库）
+*.db
+*.db-shm
+*.db-wal
+
+# 日志
+*.log
+logs/
+server/log/
+
+# 本地配置覆盖
+.env
+*.local
+
+# 插件大二进制（按需自行下载）
+server/plugins/opengfw/bin/
+server/plugins/opengfw/data/
+
+# 系统/编辑器
+.DS_Store
+.idea/
+.vscode/
+node_modules/

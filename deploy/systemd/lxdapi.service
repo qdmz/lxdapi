@@ -1,0 +1,15 @@
+[Unit]
+Description=lxdapi LXD Management Server
+After=network.target lxd.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/lxdapi
+ExecStart=/opt/lxdapi/lxdapi
+Restart=always
+RestartSec=3
+StandardOutput=append:/var/log/lxdapi.log
+StandardError=append:/var/log/lxdapi.log
+
+[Install]
+WantedBy=multi-user.target

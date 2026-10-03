@@ -3,7 +3,41 @@
 基于 **LXD** 的容器管理面板：Go 后端 + 纯静态前端，支持管理后台、用户后台、容器自助面板三级体系，内置 Web 终端（WebSocket）。
 
 - 仓库：https://github.com/qdmz/lxdapi
-- 当前版本：**v0.01**
+- 当前版本：**v0.02**
+
+---
+
+## 零、一键部署（推荐）
+
+在全新的 Debian / Ubuntu 机器上（root 执行）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/qdmz/lxdapi/main/scripts/install.sh | bash
+```
+
+脚本会自动完成：安装依赖 → 安装并初始化 LXD → 获取后端二进制（Release 下载，失败则源码编译）→ 生成配置（随机管理员密码 / API Hash / 会话密钥）→ 配置 systemd 与 nginx（80/443/8080 + 自签证书）→ 部署前端 → 放行容器出网（Docker 共存时自动处理）→ 制作 `debian-12-net` 基础镜像 → 启动并自检。
+
+### 常用参数
+
+| 参数 | 说明 |
+|---|---|
+| `--local /path/to/repo` | 用本地源码目录部署（离线环境） |
+| `--domain panel.example.com` | 写入 nginx `server_name` |
+| `--skip-lxd` | 已装好 LXD 时跳过安装与初始化 |
+| `--no-image` | 不制作 debian-12-net 镜像 |
+| `--tag v0.02` | 指定下载的 Release 版本 |
+| `--branch main` | 指定拉取的分支 |
+
+示例：
+
+```bash
+bash install.sh --domain heyun.ypvps.com
+bash install.sh --local /root/lxdapi --skip-lxd --no-image
+```
+
+执行结束后会打印服务状态、访问地址和初始管理员密码，**请登录后立即改密码**。
+
+> 生产环境建议：用正式证书替换 `/etc/nginx/ssl/lxdpanel.crt|key`；443 端口在国内需备案或走 CDN。
 
 ---
 
@@ -250,4 +284,4 @@ netfilter-persistent save
 ## 八、版本
 
 - **v0.01** — 首个归档版本：后端 + 前端 + 部署配置，含容器管理、用户与配额、端口映射、Web 终端、重装系统、模板管理。
-- **v0.02** — 容器出网自检 + 管理后台一键修复出网 NAT，修复 Docker 抢转发策略导致的容器无法上网问题。
+- **v0.02** — 容器出网自检 + 管理后台一键修复出网 NAT，修复 Docker 抢转发策略导致的容器无法上网问题；新增一键部署脚本 `scripts/install.sh`。

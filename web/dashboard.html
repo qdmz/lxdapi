@@ -66,6 +66,7 @@
           <button class="tab" data-tab="ipv6Mapping">IPv6 映射</button>
           <button class="tab" data-tab="reverseProxy">反向代理</button>
           <button class="tab" data-tab="dns">DNS</button>
+          <button class="tab" data-tab="network">网络与出网</button>
         </div>
       </div>
 
@@ -81,6 +82,16 @@
           <div class="kv-item"><div class="k">IPv6 地址</div><div class="v" id="infoIPv6">-</div></div>
           <div class="kv-item"><div class="k">配额</div><div class="v" id="infoQuota">-</div></div>
         </div>
+      </div>
+
+
+      <!-- 网络与出网 -->
+      <div class="card tab-panel" id="tab-network" style="margin-top:14px;padding:16px;display:none">
+        <div class="section-head">
+          <h3>网络与出网自检</h3>
+          <div class="extra"><button class="btn btn-ghost btn-sm" id="netCheckBtn">重新检测</button></div>
+        </div>
+        <div id="netCheckBox"><div class="empty">尚未检测，切到本页会自动检测</div></div>
       </div>
 
       <!-- IPv4 池 -->

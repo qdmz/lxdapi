@@ -483,6 +483,7 @@ func main() {
 		adminAPI.PUT("/storage-pools/:name/priority", admin.SetStoragePoolPriority)
 		adminAPI.GET("/network/nat", admin.GetNetworkNATStatus)
 		adminAPI.POST("/network/nat", admin.SetNetworkNATStatus)
+		adminAPI.POST("/network/fix-egress", admin.FixEgressNAT)
 	}
 
 	userAPI := r.Group("/api/user")
@@ -531,6 +532,7 @@ func main() {
 		containerAPI.POST("/port-mapping/release", container.ReleasePortMapping)
 		containerAPI.GET("/port-mapping", container.ListPortMappings)
 		containerAPI.GET("/ip", container.GetIP)
+		containerAPI.GET("/network-check", container.NetworkCheck)
 		containerAPI.POST("/ip/allocate", container.AllocateIP)
 		containerAPI.POST("/ip/release", container.ReleaseIP)
 		containerAPI.POST("/console/create-token", console.CreateToken)

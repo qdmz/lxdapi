@@ -200,6 +200,54 @@ curl -H "X-User-Username: test" -H "X-User-Password: <api_key>" \
 
 ---
 
+## 九、容器出网自检与一键修复（v0.02）
+
+**Docker 共存必读**：Docker 安装后会把 `FORWARD` 默认策略改成 `DROP`，且不覆盖 LXD 网段，导致容器**能到网关但出不了公网**。表现是容器里 `ping 网关` 通、`ping 8.8.8.8` 全丢。
+
+### 容器面板（用户侧）
+
+容器面板新增 **「网络与出网」** 标签页，切入即自动检测，展示：
+
+| 检测项 | 说明 |
+|---|---|
+| 容器 IP / 网关 | 容器内实际获取的地址与默认路由 |
+| 网关连通 | `ping` 网关 |
+| DNS 解析 | `getent hosts` |
+| 公网 TCP | `/dev/tcp` 连 `223.5.5.5:53` |
+| HTTP 探测 | `curl` 访问外网（未装 curl 时以 TCP 结果为准） |
+| 出网公网 IP | 经 `api.ipify.org`（超时降级 `myip.ipip.net`） |
+| 宿主 MASQUERADE | `10.120.105.0/24` 是否有出站伪装规则 |
+| 宿主 FORWARD 策略 / ip_forward | 判断是否被 Docker 拦住 |
+
+状态判定：`ok` 出网正常 / `blocked` 网关通但出不了公网 / `no_gateway` 容器无 IP 或网桥异常 / `stopped` 容器未运行。异常时给出具体原因提示。
+
+### 管理后台（管理员）
+
+容器详情页新增 **「修复容器出网」** 按钮，一键重新应用宿主出网规则并持久化：
+
+```bash
+sysctl -w net.ipv4.ip_forward=1
+iptables -I DOCKER-USER 1 -i lxdbr0 -j ACCEPT
+iptables -I DOCKER-USER 2 -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+iptables -t nat -A POSTROUTING -s <LXD网段> ! -o lxdbr0 -j MASQUERADE
+netfilter-persistent save
+```
+
+接口：`GET /api/container/network-check`（ContainerAuth）、`POST /api/admin/network/fix-egress`（AdminAuth）。
+
+### 注意
+
+`8.8.8.8` 与 `deb.debian.org` 在国内直连不通属于正常现象，不代表转发有问题；容器内建议把 apt 源换成国内镜像。
+
+---
+
+## 十、版本
+
+- **v0.02** — 新增容器出网自检（`/api/container/network-check`）与管理员一键修复出网（`/api/admin/network/fix-egress`），面板新增「网络与出网」标签页。
+
+---
+
 ## 八、版本
 
 - **v0.01** — 首个归档版本：后端 + 前端 + 部署配置，含容器管理、用户与配额、端口映射、Web 终端、重装系统、模板管理。
+- **v0.02** — 容器出网自检 + 管理后台一键修复出网 NAT，修复 Docker 抢转发策略导致的容器无法上网问题。

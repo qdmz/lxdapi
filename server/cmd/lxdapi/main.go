@@ -495,6 +495,15 @@ func main() {
 		adminAPI.GET("/settings/smtp", admin.GetSMTPSettings)
 		adminAPI.POST("/settings/smtp", admin.SaveSMTPSettings)
 		adminAPI.POST("/settings/smtp/test", admin.TestSMTP)
+		adminAPI.GET("/products", admin.GetProducts)
+		adminAPI.GET("/products/:id", admin.GetProduct)
+		adminAPI.POST("/products", admin.CreateProduct)
+		adminAPI.PUT("/products/:id", admin.UpdateProduct)
+		adminAPI.DELETE("/products/:id", admin.DeleteProduct)
+		adminAPI.GET("/plans", admin.GetPlans)
+		adminAPI.POST("/plans", admin.CreatePlan)
+		adminAPI.PUT("/plans/:id", admin.UpdatePlan)
+		adminAPI.DELETE("/plans/:id", admin.DeletePlan)
 	}
 
 	userAPI := r.Group("/api/user")

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>产品管理 - LXD 容器面板</title>
+    <link rel="stylesheet" href="/static/css/daisyui.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    {{ template "admin/admin_header.html" . }}
+
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold">产品管理</h1>
+            <button class="btn btn-primary" onclick="showCreateProduct()">+ 新建产品</button>
+        </div>
+
+        <!-- 产品列表 -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>产品名称</th>
+                                <th>类型</th>
+                                <th>CPU</th>
+                                <th>内存</th>
+                                <th>磁盘</th>
+                                <th>价格/月</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="productTable">
+                            <tr><td colspan="9"><div class="text-center py-4">加载中...</div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建/编辑产品模态框 -->
+    <dialog id="productModal" class="modal">
+        <div class="modal-box w-11/12 max-w-4xl">
+            <h3 class="text-lg font-bold mb-4" id="modalTitle">新建产品</h3>
+            <form id="productForm">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">产品名称</span></label>
+                        <input type="text" id="productName" placeholder="请输入产品名称" class="input input-bordered" required>
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">产品类型</span></label>
+                        <select id="productCategory" class="select select-bordered" required>
+                            <option value="kvm">KVM 虚拟机</option>
+                            <option value="lxc">LXC 容器</option>
+                            <option value="vm">VM 虚拟机</option>
+                        </select>
+                    </div>
+                    <div class="form-control col-span-2">
+                        <label class="label"><span class="label-text">产品描述</span></label>
+                        <textarea id="productDescription" class="textarea textarea-bordered" rows="3"></textarea>
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">CPU 核心数</span></label>
+                        <input type="number" id="productCPU" value="0" class="input input-bordered">
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">内存 (MB)</span></label>
+                        <input type="number" id="productMemory" value="0" class="input input-bordered">
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">磁盘 (GB)</span></label>
+                        <input type="number" id="productDisk" value="0" class="input input-bordered">
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">带宽 (Mbps)</span></label>
+                        <input type="number" id="productBandwidth" value="0" class="input input-bordered">
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">流量限制 (GB)</span></label>
+                        <input type="number" id="productTrafficLimit" value="0" class="input input-bordered">
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">月付价格 (元)</span></label>
+                        <input type="number" step="0.01" id="productPriceMonthly" value="0" class="input input-bordered">
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">产品状态</span></label>
+                        <select id="productStatus" class="select select-bordered">
+                            <option value="active">启用</option>
+                            <option value="inactive">禁用</option>
+                        </select>
+                    </div>
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">最大容器数</span>
+                            <input type="number" id="productMaxContainers" value="0" class="input input-bordered">
+                        </label>
+                    </div>
+                    <div class="form-control col-span-2">
+                        <label class="label cursor-pointer">
+                            <input type="checkbox" id="productAllowNesting" class="checkbox checkbox-primary">
+                            <span class="label-text">允许嵌套虚拟化</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-action">
+                    <button type="button" class="btn" onclick="closeProductModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </dialog>
+
+    <script>
+        const API_BASE = '/api/admin';
+        let editingProduct = null;
+
+        async function loadProducts() {
+            try {
+                const res = await fetch(`${API_BASE}/products`);
+                const data = await res.json();
+                if (data.code === 200) {
+                    renderProducts(data.data);
+                } else {
+                    alert('加载失败：' + data.message);
+                }
+            } catch (error) {
+                console.error('Load products error:', error);
+                alert('网络错误');
+            }
+        }
+
+        function renderProducts(products) {
+            const tbody = document.getElementById('productTable');
+            if (products.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9"><div class="text-center py-4">暂无产品</div></td></tr>';
+                return;
+            }
+            tbody.innerHTML = products.map(p => `
+                <tr>
+                    <td>${p.id}</td>
+                    <td>${p.name}</td>
+                    <td><span class="badge badge-${p.category === 'kvm' ? 'primary' : 'secondary'}">${p.category.toUpperCase()}</span></td>
+                    <td>${p.cpu || '-'}</td>
+                    <td>${p.memory ? p.memory + ' MB' : '-'}</td>
+                    <td>${p.disk ? p.disk + ' GB' : '-'}</td>
+                    <td>¥${p.price_monthly || 0}/月</td>
+                    <td><span class="badge ${p.status === 'active' ? 'badge-success' : 'badge-ghost'}">${p.status === 'active' ? '启用' : '禁用'}</span></td>
+                    <td>
+                        <button class="btn btn-ghost btn-sm" onclick="editProduct(${p.id})">编辑</button>
+                        <button class="btn btn-ghost btn-sm text-error" onclick="deleteProduct(${p.id})">删除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function showCreateProduct() {
+            editingProduct = null;
+            document.getElementById('modalTitle').textContent = '新建产品';
+            document.getElementById('productForm').reset();
+            document.getElementById('productModal').showModal();
+        }
+
+        function editProduct(id) {
+            fetch(`${API_BASE}/products/${id}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.code === 200) {
+                        editingProduct = data.data;
+                        document.getElementById('modalTitle').textContent = '编辑产品';
+                        document.getElementById('productName').value = data.data.name;
+                        document.getElementById('productCategory').value = data.data.category;
+                        document.getElementById('productDescription').value = data.data.description;
+                        document.getElementById('productCPU').value = data.data.cpu;
+                        document.getElementById('productMemory').value = data.data.memory;
+                        document.getElementById('productDisk').value = data.data.disk;
+                        document.getElementById('productBandwidth').value = data.data.bandwidth;
+                        document.getElementById('productTrafficLimit').value = data.data.traffic_limit;
+                        document.getElementById('productPriceMonthly').value = data.data.price_monthly;
+                        document.getElementById('productStatus').value = data.data.status;
+                        document.getElementById('productMaxContainers').value = data.data.max_containers;
+                        document.getElementById('productAllowNesting').checked = data.data.allow_nesting;
+                        document.getElementById('productModal').showModal();
+                    }
+                });
+        }
+
+        function closeProductModal() {
+            document.getElementById('productModal').close();
+        }
+
+        document.getElementById('productForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const productData = {
+                name: document.getElementById('productName').value,
+                category: document.getElementById('productCategory').value,
+                description: document.getElementById('productDescription').value,
+                cpu: parseInt(document.getElementById('productCPU').value),
+                memory: parseInt(document.getElementById('productMemory').value),
+                disk: parseInt(document.getElementById('productDisk').value),
+                bandwidth: parseInt(document.getElementById('productBandwidth').value),
+                traffic_limit: parseInt(document.getElementById('productTrafficLimit').value),
+                price_monthly: parseFloat(document.getElementById('productPriceMonthly').value),
+                status: document.getElementById('productStatus').value,
+                max_containers: parseInt(document.getElementById('productMaxContainers').value),
+                allow_nesting: document.getElementById('productAllowNesting').checked,
+            };
+
+            try {
+                let res;
+                if (editingProduct) {
+                    res = await fetch(`${API_BASE}/products/${editingProduct.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(productData)
+                    });
+                } else {
+                    res = await fetch(`${API_BASE}/products`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(productData)
+                    });
+                }
+                const result = await res.json();
+                if (result.code === 200) {
+                    alert('保存成功');
+                    closeProductModal();
+                    loadProducts();
+                } else {
+                    alert('保存失败：' + result.message);
+                }
+            } catch (error) {
+                console.error('Save product error:', error);
+                alert('网络错误');
+            }
+        });
+
+        async function deleteProduct(id) {
+            if (!confirm('确定要删除这个产品吗？')) return;
+            try {
+                const res = await fetch(`${API_BASE}/products/${id}`, { method: 'DELETE' });
+                const result = await res.json();
+                if (result.code === 200) {
+                    alert('删除成功');
+                    loadProducts();
+                } else {
+                    alert('删除失败：' + result.message);
+                }
+            } catch (error) {
+                console.error('Delete product error:', error);
+                alert('网络错误');
+            }
+        }
+
+        loadProducts();
+    </script>
+
+    {{ template "admin/admin_footer.html" . }}
+</body>
+</html>

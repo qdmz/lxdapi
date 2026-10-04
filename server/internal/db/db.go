@@ -73,6 +73,8 @@ func Init() error {
 		&models.StoragePool{},
 		&models.AccessToken{},
 		&models.SystemSetting{},
+		&models.Product{},
+		&models.Plan{},
 	)
 }
 

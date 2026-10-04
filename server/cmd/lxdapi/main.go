@@ -21,6 +21,8 @@ import (
 	"lxdapi/internal/api/public"
 	"lxdapi/internal/api/system"
 	"lxdapi/internal/api/user"
+	"lxdapi/internal/api/payment"
+	"lxdapi/internal/api/notification"
 	"lxdapi/internal/core"
 	"lxdapi/internal/db"
 	"lxdapi/internal/executor"
@@ -375,6 +377,19 @@ func main() {
 	r.POST("/api/user/forgot-password", user.ForgotPassword)
 	r.POST("/api/user/reset-password", user.ResetPassword)
 	r.POST("/api/user/logout", user.Logout)
+	r.POST("/api/payment/callback", payment.PayCallback)
+	r.POST("/api/tickets", notification.CreateTicket)
+	r.GET("/api/tickets", notification.GetTickets)
+	r.GET("/api/tickets/:id", notification.GetTicket)
+	r.POST("/api/tickets/:id/close", notification.CloseTicket)
+	r.POST("/api/tickets/:id/message", notification.AddTicketMessage)
+	r.GET("/api/tickets/:id/messages", notification.GetTicketMessages)
+	r.POST("/api/notifications", notification.CreateNotification)
+	r.GET("/api/notifications", notification.GetNotifications)
+	r.GET("/api/notifications/unread", notification.GetUnreadCount)
+	r.POST("/api/notifications/:id/read", notification.MarkAsRead)
+	r.POST("/api/notifications/read-all", notification.MarkAllAsRead)
+	r.DELETE("/api/notifications/:id", notification.DeleteNotification)
 
 	r.GET("/user/login", handlers.UserLogin)
 	r.GET("/user/register", handlers.UserRegisterPage)

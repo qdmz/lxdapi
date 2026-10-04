@@ -75,6 +75,11 @@ func Init() error {
 		&models.SystemSetting{},
 		&models.Product{},
 		&models.Plan{},
+		&models.PaymentOrder{},
+		&models.PayConfig{},
+		&models.Ticket{},
+		&models.TicketMessage{},
+		&models.Notification{},
 	)
 }
 

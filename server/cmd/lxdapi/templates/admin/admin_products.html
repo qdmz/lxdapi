@@ -112,6 +112,20 @@
                         <input type="number" id="productStock" value="-1" class="input input-bordered">
                     </div>
                     <div class="form-control">
+                        <label class="label"><span class="label-text">每用户限购（0 不限）</span></label>
+                        <input type="number" id="productMaxPerUser" value="0" min="0" class="input input-bordered">
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">一次性设置费（元）</span></label>
+                        <input type="number" step="0.01" id="productSetupFee" value="0" min="0" class="input input-bordered">
+                    </div>
+                    <div class="form-control">
+                        <label class="label cursor-pointer justify-start gap-3">
+                            <input type="checkbox" id="productAllowFree" class="checkbox">
+                            <span class="label-text">允许 0 元开通</span>
+                        </label>
+                    </div>
+                    <div class="form-control">
                         <label class="label"><span class="label-text">排序</span></label>
                         <input type="number" id="productSort" value="0" class="input input-bordered">
                     </div>
@@ -278,6 +292,9 @@
                         }
                         imgSel.value = curImg;
                         document.getElementById('productStock').value = data.data.stock == null ? -1 : data.data.stock;
+                        document.getElementById('productMaxPerUser').value = data.data.max_per_user || 0;
+                        document.getElementById('productSetupFee').value = data.data.setup_fee || 0;
+                        document.getElementById('productAllowFree').checked = !!data.data.allow_free;
                         document.getElementById('productSort').value = data.data.sort || 0;
                         document.getElementById('productStatus').value = data.data.status;
                         document.getElementById('productMaxContainers').value = data.data.max_containers;
@@ -309,6 +326,9 @@
                 node_id: parseInt(document.getElementById('productNode').value || '0'),
                 image: document.getElementById('productImage').value,
                 stock: parseInt(document.getElementById('productStock').value || '-1'),
+                max_per_user: parseInt(document.getElementById('productMaxPerUser').value || '0'),
+                setup_fee: parseFloat(document.getElementById('productSetupFee').value || '0'),
+                allow_free: document.getElementById('productAllowFree').checked,
                 sort: parseInt(document.getElementById('productSort').value || '0'),
                 status: document.getElementById('productStatus').value,
                 max_containers: parseInt(document.getElementById('productMaxContainers').value),

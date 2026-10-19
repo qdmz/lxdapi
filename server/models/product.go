@@ -36,6 +36,11 @@ type Product struct {
 	AllowDomainBinding bool `gorm:"default:false" json:"allow_domain_binding"`
 	AllowSFTP          bool `gorm:"default:false" json:"allow_sftp"`
 
+	// 购买限制与费用
+	MaxPerUser int     `gorm:"default:0" json:"max_per_user"`   // 每用户限购数量，0=不限
+	AllowFree  bool    `gorm:"default:false" json:"allow_free"` // 是否允许0元开通
+	SetupFee   float64 `gorm:"type:decimal(10,2);default:0" json:"setup_fee"` // 一次性设置费
+
 	// 同步配置
 	AutoSync   bool   `gorm:"default:false" json:"auto_sync"`
 	LastSyncAt *string `json:"last_sync_at"`

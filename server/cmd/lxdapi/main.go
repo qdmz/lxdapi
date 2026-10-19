@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -695,6 +696,12 @@ func main() {
 	}
 
 	addr := fmt.Sprintf("%s:%d", cfg.System.Server.Host, cfg.System.Server.Port)
+	// Railway 等平台通过 PORT 环境变量指定端口，优先使用
+	if p := os.Getenv("PORT"); p != "" {
+		if pi, err := strconv.Atoi(p); err == nil && pi > 0 {
+			addr = fmt.Sprintf("%s:%d", cfg.System.Server.Host, pi)
+		}
+	}
 
 	if cfg.System.Server.TLS.Enabled {
 		startWithTLS(r, addr, cfg)

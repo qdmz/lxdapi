@@ -93,10 +93,18 @@
                 <button onclick="unsuspendContainer()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded transition whitespace-nowrap">恢复</button>
                 <button onclick="syncContainer()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded transition whitespace-nowrap">同步</button>
                 <button onclick="openConsole()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 rounded transition whitespace-nowrap">VNC控制台</button>
+                <button onclick="openSFTP()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 rounded transition whitespace-nowrap">SFTP文件</button>
                 <button onclick="showResetPasswordModal()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded transition whitespace-nowrap">重置密码</button>
                 <button onclick="showDNSModal()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded transition whitespace-nowrap">DNS设置</button>
                 <button onclick="resetTraffic()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-pink-700 bg-pink-50 hover:bg-pink-100 border border-pink-200 rounded transition whitespace-nowrap">流量重置</button>
                 <button onclick="showReinstallModal()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded transition whitespace-nowrap">重装系统</button>
+                <button onclick="renewContainer()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded transition whitespace-nowrap">续费</button>
+                <label class="flex items-center gap-1.5 px-2 py-1 lg:py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded transition whitespace-nowrap cursor-pointer">
+                    <input type="checkbox" id="autoRenewToggle" class="accent-emerald-600"> 自动续费
+                </label>
+            </div>
+            <div class="flex flex-wrap gap-1.5 lg:gap-2 mt-2 pt-2 border-t border-gray-100">
+                <a id="containerPanelLink" href="#" target="_blank" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded transition whitespace-nowrap">容器面板</a>
             </div>
         </div>
 
@@ -529,6 +537,7 @@
             loadPortRangeConfig();
             loadContainerInfo();
             loadContainerHash();
+            loadAutoRenew();
             loadIPv4PoolBindings();
             loadIPv4MappingBindings();
             loadIPv6PoolBindings();
@@ -926,21 +935,132 @@
             });
         }
 
+        function openSFTP() {
+            $.ajax({
+                url: '/api/user/console/sftp-token',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ hostname: containerName }),
+                success: function(result) {
+                    if (result.code === 200 && result.data.token) {
+                        const sftpUrl = `/console/sftp?token=${result.data.token}`;
+                        window.open(sftpUrl, '_blank', 'width=1200,height=800');
+                    } else {
+                        showToast('error', '创建SFTP令牌失败: ' + (result.msg || result.message));
+                    }
+                },
+                error: function(xhr) {
+                    handleAuthError(xhr);
+                    showToast('error', '打开SFTP文件管理器失败');
+                }
+            });
+        }
+
+        function renewContainer() {
+            var useBalance = confirm('确定为容器「' + containerName + '」创建续费订单？\n\n点击“确定”使用余额支付，点击“取消”使用第三方支付。');
+            $.ajax({
+                url: '/api/user/orders/renew',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ container_name: containerName, pay_type: useBalance ? 'balance' : 'alipay' }),
+                success: function (r) {
+                    if (r.code === 200 && r.data && r.data.pay_url) {
+                        window.open(r.data.pay_url, '_blank');
+                        showToast('success', '续费订单已创建，支付窗口已打开');
+                    } else if (r.code === 200 && r.data && r.data.order && r.data.order.order_no) {
+                        if (useBalance) {
+                            payWithBalance(r.data.order.order_no);
+                        } else {
+                            showToast('success', '续费订单已创建，请前往「订单」页完成支付');
+                        }
+                    } else {
+                        showToast('error', r.msg || '创建续费订单失败');
+                    }
+                },
+                error: function () { showToast('error', '网络错误'); }
+            });
+        }
+
+        function payWithBalance(orderNo) {
+            $.ajax({
+                url: '/api/user/orders/pay-with-balance',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ order_no: orderNo }),
+                success: function (r) {
+                    if (r.code === 200) {
+                        showToast('success', '已使用余额支付，系统正在处理续费');
+                    } else {
+                        showToast('error', r.msg || '余额支付失败');
+                    }
+                },
+                error: function () { showToast('error', '网络错误'); }
+            });
+        }
+
+        function loadAutoRenew() {
+            $.ajax({
+                url: '/api/user/balance',
+                type: 'GET',
+                success: function (r) {
+                    if (r.code === 200 && r.data) {
+                        $('#autoRenewToggle').prop('checked', !!r.data.auto_renew);
+                    }
+                }
+            });
+        }
+
+        $(function () {
+            $('#autoRenewToggle').on('change', function () {
+                var checked = $(this).prop('checked');
+                $.ajax({
+                    url: '/api/user/auto-renew',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ auto_renew: checked }),
+                    success: function (r) {
+                        if (r.code === 200) {
+                            showToast('success', checked ? '已开启自动续费' : '已关闭自动续费');
+                        } else {
+                            $(this).prop('checked', !checked);
+                            showToast('error', r.msg || '设置失败');
+                        }
+                    },
+                    error: function () {
+                        $(this).prop('checked', !checked);
+                        showToast('error', '网络错误');
+                    }
+                });
+            });
+        });
+
         function loadContainerHash() {
             $.ajax({
                 url: `/api/user/containers/${encodeURIComponent(containerName)}/credential`,
                 type: 'GET',
                 success: function(result) {
                     if (result.code === 200 && result.data) {
-                        $('#containerHash').text(result.data.hash || '-');
+                        const hash = result.data.hash || '';
+                        $('#containerHash').text(hash || '-');
+                        updatePanelLink(hash);
                     } else {
                         $('#containerHash').text('-');
+                        updatePanelLink('');
                     }
                 },
                 error: function() {
                     $('#containerHash').text('加载失败');
                 }
             });
+        }
+
+        function updatePanelLink(hash) {
+            const link = $('#containerPanelLink');
+            if (hash) {
+                link.attr('href', '/container/dashboard?hash=' + encodeURIComponent(hash));
+            } else {
+                link.attr('href', '#');
+            }
         }
 
         function copyHash() {
@@ -989,6 +1109,7 @@
                 success: function(result) {
                     if (result.code === 200 && result.data) {
                         $('#containerHash').text(result.data.hash);
+                        updatePanelLink(result.data.hash);
                         showToast('success', '访问码已重新生成');
                     } else {
                         showToast('error', result.msg || '重新生成失败');

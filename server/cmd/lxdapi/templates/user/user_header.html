@@ -41,9 +41,10 @@
     }
 
     @media (max-width: 640px) {
-        .nav-username-text {
+        .nav-username-text, .nav-text {
             display: none;
         }
+    }
         .nav-logout-text {
             display: none;
         }
@@ -60,6 +61,29 @@
                 </a>
             </div>
             <div class="flex items-center space-x-2 md:space-x-3">
+                <div class="hidden sm:flex items-center space-x-1">
+                    <a href="/user/containers" class="flex items-center gap-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-2 md:px-3 py-2 rounded-lg text-sm font-medium smooth-transition">
+                        <span class="iconify" data-icon="mdi:cube-outline" data-width="16"></span>
+                        <span class="nav-text">我的容器</span>
+                    </a>
+                    <a href="/user/shop" class="flex items-center gap-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-2 md:px-3 py-2 rounded-lg text-sm font-medium smooth-transition">
+                        <span class="iconify" data-icon="mdi:storefront-outline" data-width="16"></span>
+                        <span class="nav-text">选购服务</span>
+                    </a>
+                    <a href="/user/orders" class="flex items-center gap-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-2 md:px-3 py-2 rounded-lg text-sm font-medium smooth-transition">
+                        <span class="iconify" data-icon="mdi:receipt-text-outline" data-width="16"></span>
+                        <span class="nav-text">我的订单</span>
+                    </a>
+                    <a href="/user/tickets" class="flex items-center gap-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-2 md:px-3 py-2 rounded-lg text-sm font-medium smooth-transition">
+                        <span class="iconify" data-icon="mdi:ticket-outline" data-width="16"></span>
+                        <span class="nav-text">工单</span>
+                    </a>
+                    <a href="/user/notifications" class="flex items-center gap-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-2 md:px-3 py-2 rounded-lg text-sm font-medium smooth-transition relative">
+                        <span class="iconify" data-icon="mdi:bell-outline" data-width="16"></span>
+                        <span class="nav-text">消息</span>
+                        <span id="unreadBadge" class="hidden absolute top-1 right-1 bg-red-500 text-white text-[10px] rounded-full min-w-[16px] h-4 px-1 items-center justify-center"></span>
+                    </a>
+                </div>
                 <div class="flex items-center space-x-2 text-gray-700 bg-gray-50 px-2 md:px-3 py-2 rounded-lg smooth-transition hover:bg-gray-100">
                     <span class="iconify text-gray-500" data-icon="mdi:account-circle" data-width="18" data-height="18" class="md:w-5 md:h-5"></span>
                     <span class="nav-username-text text-sm font-medium">{{.username}}</span>
@@ -89,5 +113,18 @@ function logout() {
         });
     }
 }
+function loadUnreadCount() {
+    $.get('/api/user/notifications/unread', function (r) {
+        if (r.code === 200 && r.data && r.data.count > 0) {
+            var b = document.getElementById('unreadBadge');
+            if (b) {
+                b.textContent = r.data.count > 99 ? '99+' : r.data.count;
+                b.classList.remove('hidden');
+                b.classList.add('flex');
+            }
+        }
+    });
+}
+loadUnreadCount();
 </script>
 {{end}}

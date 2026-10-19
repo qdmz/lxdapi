@@ -3,9 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>产品管理 - LXD 容器面板</title>
-    <link rel="stylesheet" href="/static/css/daisyui.min.css">
-    <link rel="stylesheet" href="/static/css/style.css">
+    <title>{{ .title }}</title>
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <link href="/static/css/daisyui.min.css" rel="stylesheet">
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    {{else}}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {{end}}
 </head>
 <body>
     {{ template "admin/admin_header.html" . }}
@@ -90,6 +98,34 @@
                         <input type="number" step="0.01" id="productPriceMonthly" value="0" class="input input-bordered">
                     </div>
                     <div class="form-control">
+                        <label class="label"><span class="label-text">所属节点</span></label>
+                        <select id="productNode" class="select select-bordered"><option value="0">默认节点</option></select>
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">镜像</span></label>
+                        <input type="text" id="productImage" placeholder="debian-12-net" class="input input-bordered">
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">库存（-1 不限）</span></label>
+                        <input type="number" id="productStock" value="-1" class="input input-bordered">
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">排序</span></label>
+                        <input type="number" id="productSort" value="0" class="input input-bordered">
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">时付价格 (元)</span></label>
+                        <input type="number" step="0.01" id="productPriceHourly" value="0" class="input input-bordered">
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">季付价格 (元)</span></label>
+                        <input type="number" step="0.01" id="productPriceQuarterly" value="0" class="input input-bordered">
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">年付价格 (元)</span></label>
+                        <input type="number" step="0.01" id="productPriceYearly" value="0" class="input input-bordered">
+                    </div>
+                    <div class="form-control">
                         <label class="label"><span class="label-text">产品状态</span></label>
                         <select id="productStatus" class="select select-bordered">
                             <option value="active">启用</option>
@@ -120,15 +156,27 @@
     <script>
         const API_BASE = '/api/admin';
         let editingProduct = null;
+        let nodesCache = [];
+
+        async function loadNodes() {
+            const res = await fetch(`${API_BASE}/nodes`);
+            const data = await res.json();
+            if (data.code === 200) {
+                nodesCache = data.data || [];
+                const sel = document.getElementById('productNode');
+                sel.innerHTML = '<option value="0">默认节点</option>' + nodesCache.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
+            }
+        }
 
         async function loadProducts() {
+            await loadNodes();
             try {
                 const res = await fetch(`${API_BASE}/products`);
                 const data = await res.json();
                 if (data.code === 200) {
                     renderProducts(data.data);
                 } else {
-                    alert('加载失败：' + data.message);
+                    alert('加载失败：' + data.msg);
                 }
             } catch (error) {
                 console.error('Load products error:', error);
@@ -183,6 +231,13 @@
                         document.getElementById('productBandwidth').value = data.data.bandwidth;
                         document.getElementById('productTrafficLimit').value = data.data.traffic_limit;
                         document.getElementById('productPriceMonthly').value = data.data.price_monthly;
+                        document.getElementById('productPriceHourly').value = data.data.price_hourly || 0;
+                        document.getElementById('productPriceQuarterly').value = data.data.price_quarterly || 0;
+                        document.getElementById('productPriceYearly').value = data.data.price_yearly || 0;
+                        document.getElementById('productNode').value = data.data.node_id || 0;
+                        document.getElementById('productImage').value = data.data.image || '';
+                        document.getElementById('productStock').value = data.data.stock == null ? -1 : data.data.stock;
+                        document.getElementById('productSort').value = data.data.sort || 0;
                         document.getElementById('productStatus').value = data.data.status;
                         document.getElementById('productMaxContainers').value = data.data.max_containers;
                         document.getElementById('productAllowNesting').checked = data.data.allow_nesting;
@@ -206,7 +261,14 @@
                 disk: parseInt(document.getElementById('productDisk').value),
                 bandwidth: parseInt(document.getElementById('productBandwidth').value),
                 traffic_limit: parseInt(document.getElementById('productTrafficLimit').value),
+                price_hourly: parseFloat(document.getElementById('productPriceHourly').value || '0'),
                 price_monthly: parseFloat(document.getElementById('productPriceMonthly').value),
+                price_quarterly: parseFloat(document.getElementById('productPriceQuarterly').value || '0'),
+                price_yearly: parseFloat(document.getElementById('productPriceYearly').value || '0'),
+                node_id: parseInt(document.getElementById('productNode').value || '0'),
+                image: document.getElementById('productImage').value,
+                stock: parseInt(document.getElementById('productStock').value || '-1'),
+                sort: parseInt(document.getElementById('productSort').value || '0'),
                 status: document.getElementById('productStatus').value,
                 max_containers: parseInt(document.getElementById('productMaxContainers').value),
                 allow_nesting: document.getElementById('productAllowNesting').checked,
@@ -233,7 +295,7 @@
                     closeProductModal();
                     loadProducts();
                 } else {
-                    alert('保存失败：' + result.message);
+                    alert('保存失败：' + result.msg);
                 }
             } catch (error) {
                 console.error('Save product error:', error);
@@ -250,7 +312,7 @@
                     alert('删除成功');
                     loadProducts();
                 } else {
-                    alert('删除失败：' + result.message);
+                    alert('删除失败：' + result.msg);
                 }
             } catch (error) {
                 console.error('Delete product error:', error);

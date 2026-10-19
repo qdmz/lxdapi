@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <link href="/static/css/daisyui.min.css" rel="stylesheet">
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    {{else}}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {{end}}
+</head>
+<body class="min-h-screen flex flex-col" style="background-color:#f9fafb">
+{{template "user/user_header.html" .}}
+<div class="flex-1" style="background-color: #f9fafb;">
+<div class="max-w-3xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
+        <div>
+            <h1 class="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+                <span class="iconify" data-icon="mdi:ticket-outline" data-width="20"></span>工单详情
+            </h1>
+            <p class="text-xs sm:text-sm text-gray-500 mt-1" id="ticketMeta"></p>
+        </div>
+        <a href="/user/tickets" class="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">返回列表</a>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-5 mb-4">
+        <h2 class="text-base font-semibold text-gray-800 mb-3" id="ticketTitle"></h2>
+        <p class="text-sm text-gray-600 whitespace-pre-wrap" id="ticketContent"></p>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-5 mb-4">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">对话记录</h2>
+        <div id="messages" class="space-y-3 max-h-[400px] overflow-y-auto"></div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-5" id="replyBox">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">追加回复</h2>
+        <textarea id="replyMsg" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="补充说明或追问"></textarea>
+        <div class="flex justify-end gap-2 mt-3">
+            <button onclick="closeTicket()" class="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition">关闭工单</button>
+            <button onclick="sendReply()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">发送</button>
+        </div>
+    </div>
+</div>
+
+<script>
+var API = '/api/user';
+var ticketId = {{ .id }};
+
+function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+function fmtTime(s) {
+    if (!s) return '-';
+    return String(s).replace('T', ' ').substring(0, 19);
+}
+function statusBadge(s) {
+    var map = { open: ['待处理', 'bg-amber-100 text-amber-700'], pending: ['待确认', 'bg-blue-100 text-blue-700'], closed: ['已关闭', 'bg-gray-200 text-gray-600'] };
+    var m = map[s] || [s, 'bg-gray-100 text-gray-600'];
+    return '<span class="px-2 py-0.5 rounded-full text-xs ' + m[1] + '">' + m[0] + '</span>';
+}
+
+function loadTicket() {
+    $.get(API + '/tickets/' + ticketId, function (r) {
+        if (r.code !== 200) { alert(r.msg || '加载失败'); return; }
+        var t = r.data;
+        document.getElementById('ticketMeta').textContent = '工单 #' + t.id + ' · ' + statusBadge(t.status);
+        document.getElementById('ticketTitle').textContent = t.title;
+        document.getElementById('ticketContent').textContent = t.content;
+        document.getElementById('replyBox').style.display = (t.status === 'closed') ? 'none' : 'block';
+        loadMessages();
+    });
+}
+
+function loadMessages() {
+    $.get(API + '/tickets/' + ticketId + '/messages', function (r) {
+        if (r.code !== 200) return;
+        renderMessages(r.data || []);
+    });
+}
+
+function renderMessages(msgs) {
+    var el = document.getElementById('messages');
+    if (!msgs.length) {
+        el.innerHTML = '<div class="text-sm text-gray-400 py-2">暂无对话记录</div>';
+        return;
+    }
+    el.innerHTML = msgs.map(function (m) {
+        var isAdmin = m.is_admin;
+        var align = isAdmin ? 'justify-end' : 'justify-start';
+        var bg = isAdmin ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-200';
+        var who = isAdmin ? '客服' : '我';
+        return '<div class="flex ' + align + '">' +
+            '<div class="max-w-[80%]">' +
+            '<div class="text-xs text-gray-400 mb-1">' + esc(who) + ' · ' + fmtTime(m.created_at) + '</div>' +
+            '<div class="px-3 py-2 rounded-lg text-sm border ' + bg + ' text-gray-800 whitespace-pre-wrap">' + esc(m.message) + '</div>' +
+            '</div></div>';
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+}
+
+function sendReply() {
+    var msg = document.getElementById('replyMsg').value.trim();
+    if (!msg) { alert('请输入内容'); return; }
+    $.ajax({
+        url: API + '/tickets/' + ticketId + '/messages', type: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ message: msg }),
+        success: function (r) {
+            if (r.code === 200) {
+                document.getElementById('replyMsg').value = '';
+                loadMessages();
+            } else alert(r.msg || '发送失败');
+        },
+        error: function () { alert('请求失败'); }
+    });
+}
+
+function closeTicket() {
+    if (!confirm('确定关闭该工单？')) return;
+    $.ajax({
+        url: API + '/tickets/' + ticketId + '/close', type: 'POST',
+        success: function (r) {
+            if (r.code === 200) { alert('已关闭'); loadTicket(); }
+            else alert(r.msg || '操作失败');
+        },
+        error: function () { alert('请求失败'); }
+    });
+}
+
+loadTicket();
+</script>
+</div>
+</div>
+{{template "user/user_footer.html" .}}
+</body>
+</html>

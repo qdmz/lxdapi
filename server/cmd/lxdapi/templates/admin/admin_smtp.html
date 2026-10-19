@@ -1,14 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <link href="/static/css/daisyui.min.css" rel="stylesheet">
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    {{else}}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {{end}}
+</head>
+<body class="min-h-screen flex flex-col">
 {{template "admin/admin_header.html" .}}
+<div class="flex-1" style="background-color: #f9fafb;">
 <div class="max-w-5xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
     <div class="mb-4 sm:mb-6">
         <h1 class="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
             <span class="iconify" data-icon="mdi:email-outline" data-width="20"></span>邮件服务（SMTP）配置
         </h1>
-        <p class="text-xs sm:text-sm text-gray-500 mt-1">用于用户注册激活、找回密码等邮件发送；模板留空则使用系统默认。可用变量：{{username}} {{email}} {{link}} {{site}}</p>
+        <p class="text-xs sm:text-sm text-gray-500 mt-1">用于用户注册激活、找回密码等邮件发送；模板留空则使用系统默认。可用变量：{{"{{username}} {{email}} {{link}} {{site}}"}}</p>
     </div>
     <div id="alertBox" class="hidden mb-4 text-sm rounded-lg px-3 py-2"></div>
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-5 mb-4">
-        <h2 class="text-sm font-semibold text-gray-700 mb-3">SMTP 服务器</h2>
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">通用开关</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" id="registerEnabled" class="rounded border-gray-300"> 开放注册
+            </label>
+            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" id="captchaEnabled" class="rounded border-gray-300"> 注册 / 忘记密码启用验证码
+            </label>
+            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" id="emailNotify" class="rounded border-gray-300"> 启用邮件通知
+            </label>
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-5 mb-4">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">广播 / 公告</h2>
+        <div class="space-y-3">
+            <div>
+                <div class="text-xs text-gray-600 mb-1">标题</div>
+                <input id="bcTitle" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="系统升级公告">
+            </div>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">内容</div>
+                <textarea id="bcContent" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="公告正文（发送给全体用户站内通知）"></textarea>
+            </div>
+            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" id="bcMail" class="rounded border-gray-300"> 同时发送邮件（需启用邮件通知且配置 SMTP）
+            </label>
+            <div>
+                <button onclick="sendBroadcast()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">发送广播</button>
+            </div>
+        </div>
+    </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <label class="flex items-center gap-2 text-sm text-gray-700 sm:col-span-2">
                 <input type="checkbox" id="smtpEnabled" class="rounded border-gray-300"> 启用邮件服务
@@ -44,15 +94,21 @@
         <div class="space-y-4">
             <div>
                 <div class="text-xs text-gray-600 mb-1">激活邮件 · 主题</div>
-                <input id="actSubject" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="【{{site}}】请激活你的账号">
+                <input id="actSubject" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="{{"【{{site}}】请激活你的账号"}}">
                 <div class="text-xs text-gray-600 mt-2 mb-1">激活邮件 · 正文（支持 HTML）</div>
                 <textarea id="actBody" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono"></textarea>
             </div>
             <div>
-                <div class="text-xs text-gray-600 mb-1">重置密码邮件 · 主题</div>
-                <input id="rstSubject" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="【{{site}}】重置密码">
+                <div class="text-xs text-gray-600 mt-2 mb-1">重置密码邮件 · 主题</div>
+                <input id="rstSubject" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="{{"【{{site}}】重置密码"}}">
                 <div class="text-xs text-gray-600 mt-2 mb-1">重置密码邮件 · 正文（支持 HTML）</div>
                 <textarea id="rstBody" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono"></textarea>
+            </div>
+            <div>
+                <div class="text-xs text-gray-600 mt-2 mb-1">订单开通邮件 · 主题</div>
+                <input id="ordSubject" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="{{"【{{site}}】服务已开通"}}">
+                <div class="text-xs text-gray-600 mt-2 mb-1">订单开通邮件 · 正文（支持 HTML，变量：{{"{{order_no}} {{product}} {{container}} {{amount}} {{username}}"}}）</div>
+                <textarea id="ordBody" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono"></textarea>
             </div>
         </div>
     </div>
@@ -86,6 +142,15 @@ function loadSettings() {
         document.getElementById('actBody').value = t.activate_body || '';
         document.getElementById('rstSubject').value = t.reset_subject || '';
         document.getElementById('rstBody').value = t.reset_body || '';
+        document.getElementById('ordSubject').value = t.order_subject || '';
+        document.getElementById('ordBody').value = t.order_body || '';
+    });
+    $.get('/api/admin/settings/general', function (r) {
+        if (r.code !== 200) return;
+        var d = r.data || {};
+        document.getElementById('registerEnabled').checked = !!d.register_enabled;
+        document.getElementById('captchaEnabled').checked = !!d.captcha_enabled;
+        document.getElementById('emailNotify').checked = !!d.email_notify;
     });
 }
 function saveSettings() {
@@ -102,11 +167,49 @@ function saveSettings() {
             activate_subject: document.getElementById('actSubject').value,
             activate_body: document.getElementById('actBody').value,
             reset_subject: document.getElementById('rstSubject').value,
-            reset_body: document.getElementById('rstBody').value
+            reset_body: document.getElementById('rstBody').value,
+            order_subject: document.getElementById('ordSubject').value,
+            order_body: document.getElementById('ordBody').value
+        }),
+        success: function (r) {
+            if (r.code === 200) saveGeneral();
+            else showAlert('error', r.msg || '保存失败');
+        },
+        error: function () { showAlert('error', '请求失败'); }
+    });
+}
+function saveGeneral() {
+    $.ajax({
+        url: '/api/admin/settings/general', type: 'POST', contentType: 'application/json',
+        data: JSON.stringify({
+            register_enabled: document.getElementById('registerEnabled').checked,
+            captcha_enabled: document.getElementById('captchaEnabled').checked,
+            email_notify: document.getElementById('emailNotify').checked
         }),
         success: function (r) {
             if (r.code === 200) showAlert('success', '配置已保存');
             else showAlert('error', r.msg || '保存失败');
+        },
+        error: function () { showAlert('error', '请求失败'); }
+    });
+}
+function sendBroadcast() {
+    var title = document.getElementById('bcTitle').value;
+    var content = document.getElementById('bcContent').value;
+    if (!title || !content) { showAlert('error', '请填写标题和内容'); return; }
+    $.ajax({
+        url: '/api/admin/settings/broadcast', type: 'POST', contentType: 'application/json',
+        data: JSON.stringify({
+            title: title,
+            content: content,
+            send_mail: document.getElementById('bcMail').checked
+        }),
+        success: function (r) {
+            if (r.code === 200) {
+                showAlert('success', '已广播给 ' + (r.data ? r.data.sent : 0) + ' 位用户');
+                document.getElementById('bcTitle').value = '';
+                document.getElementById('bcContent').value = '';
+            } else showAlert('error', r.msg || '发送失败');
         },
         error: function () { showAlert('error', '请求失败'); }
     });
@@ -128,4 +231,8 @@ function testMail() {
 }
 $(function () { loadSettings(); });
 </script>
+</div>
+</div>
 {{template "admin/admin_footer.html" .}}
+</body>
+</html>

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SFTP 文件管理</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    {{if .UseLocalCDN}}
+    <script src="/static/js/tailwindcss.js"></script>
+    {{else}}
+    <script src="https://cdn.tailwindcss.com"></script>
+    {{end}}
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #d1d5db;
+        }
+        .status-dot.connected { background: #10b981; animation: pulse 2s infinite; }
+        .status-dot.connecting { background: #f59e0b; animation: blink 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .file-row { transition: background-color .1s; }
+        .file-row:hover { background-color: #f1f5f9; }
+        .action-btn { opacity: 0; transition: opacity .15s; }
+        .file-row:hover .action-btn { opacity: 1; }
+        .drag-over { background-color: #dbeafe !important; border-color: #2563eb !important; }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen flex flex-col overflow-hidden">
+    <div class="bg-white px-4 lg:px-6 py-3 lg:py-4 flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 shadow-sm border-b border-gray-200 flex-shrink-0">
+        <div class="min-w-0">
+            <h1 class="text-base lg:text-lg font-semibold text-gray-800 mb-0.5 truncate">SFTP 文件管理</h1>
+            <p class="text-xs lg:text-sm text-gray-600 truncate">容器: <span id="container-name">{{.hostname}}</span> | 镜像: <span id="container-image">{{.image}}</span> | 状态: <span id="container-status">{{.status}}</span></p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 lg:gap-3 flex-shrink-0">
+            <div class="flex items-center gap-1 lg:gap-1.5">
+                <button class="bg-white border border-gray-300 rounded-md px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all font-medium" id="btn-refresh" title="刷新列表">刷新</button>
+                <button class="bg-white border border-gray-300 rounded-md px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all font-medium" id="btn-mkdir" title="新建文件夹">新建文件夹</button>
+                <button class="bg-white border border-gray-300 rounded-md px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all font-medium" id="btn-upload" title="上传文件">上传文件</button>
+            </div>
+            <div class="flex items-center gap-1.5 lg:gap-2 bg-gray-50 px-2 lg:px-3 py-1 lg:py-1.5 rounded-full border border-gray-200">
+                <div class="status-dot" id="status-dot"></div>
+                <span class="text-xs lg:text-sm font-medium text-gray-700" id="status-text">未连接</span>
+            </div>
+            <button class="bg-blue-500 hover:bg-blue-600 text-white px-3 lg:px-4 py-1 lg:py-1.5 rounded-md text-xs lg:text-sm font-semibold transition-all" id="connect-btn">连接</button>
+        </div>
+    </div>
+
+    <div class="bg-white border-b border-gray-200 px-4 lg:px-6 py-2 lg:py-2.5 flex items-center gap-2 text-xs lg:text-sm text-gray-600 flex-shrink-0 overflow-x-auto" id="breadcrumb">
+    </div>
+
+    <div class="flex-1 overflow-auto" id="file-list">
+        <table class="w-full table-auto text-xs lg:text-sm">
+            <thead class="bg-gray-50 sticky top-0 z-10">
+            <tr class="text-left text-gray-500">
+                <th class="px-4 lg:px-6 py-2 lg:py-3 font-medium w-12"></th>
+                <th class="px-4 lg:px-6 py-2 lg:py-3 font-medium">名称</th>
+                <th class="px-4 lg:px-6 py-2 lg:py-3 font-medium hidden lg:table-cell">大小</th>
+                <th class="px-4 lg:px-6 py-2 lg:py-3 font-medium hidden lg:table-cell">修改时间</th>
+                <th class="px-4 lg:px-6 py-2 lg:py-3 font-medium hidden lg:table-cell">类型</th>
+                <th class="px-4 lg:px-6 py-2 lg:py-3 font-medium w-32 text-right">操作</th>
+            </tr>
+            </thead>
+            <tbody id="file-tbody">
+            </tbody>
+        </table>
+        <div id="empty-state" class="hidden py-20 text-center text-gray-500">
+            <svg class="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 3v1m1.5 0h.01M19 3v1m-1.5 0h.01M9.5 7a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM18.5 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM13 18a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+            <p>尚未连接容器，请点击右上角“连接”</p>
+        </div>
+        <div id="error-state" class="hidden py-20 text-center">
+            <p class="text-red-600 font-medium" id="error-msg"></p>
+            <button class="mt-4 text-blue-600 hover:text-blue-700 text-sm font-medium" id="retry-link">重试</button>
+        </div>
+        <div id="loading-state" class="hidden py-20 text-center">
+            <div class="inline-block w-6 h-6 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+            <p class="mt-3 text-gray-500">加载中...</p>
+        </div>
+    </div>
+
+    <!-- Upload modal -->
+    <div class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40" id="upload-modal">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
+            <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 class="font-semibold text-gray-800">上传文件</h3>
+                <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" id="upload-close">&times;</button>
+            </div>
+            <div class="p-5">
+                <label class="block text-sm font-medium text-gray-700 mb-2">选择要上传的文件</label>
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors" id="upload-drop">
+                    <svg class="w-10 h-10 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                    </svg>
+                    <p class="mt-2 text-sm text-gray-600">拖拽文件到此处，或点击选择</p>
+                    <input type="file" id="upload-input" class="hidden" multiple>
+                </div>
+                <div id="upload-queue" class="mt-4 space-y-2"></div>
+            </div>
+            <div class="px-5 py-4 bg-gray-50 rounded-b-lg text-right">
+                <button class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-all" id="upload-cancel" disabled>取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mkdir modal -->
+    <div class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40" id="mkdir-modal">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 class="font-semibold text-gray-800">新建文件夹</h3>
+                <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" id="mkdir-close">&times;</button>
+            </div>
+            <div class="p-5">
+                <label class="block text-sm font-medium text-gray-700 mb-2">文件夹名称</label>
+                <input type="text" id="mkdir-input" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="例如: logs">
+                <p class="text-xs text-gray-500 mt-2">将创建在当前目录下</p>
+            </div>
+            <div class="px-5 py-4 bg-gray-50 rounded-b-lg text-right">
+                <button class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md text-sm font-medium mr-2 transition-all" id="mkdir-cancel">取消</button>
+                <button class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-all" id="mkdir-ok">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit modal -->
+    <div class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40" id="edit-modal">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 flex flex-col" style="max-height:85vh">
+            <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 class="font-semibold text-gray-800 truncate pr-4" id="edit-title">编辑文件</h3>
+                <button class="text-gray-400 hover:text-gray-600 text-xl leading-none flex-shrink-0" id="edit-close">&times;</button>
+            </div>
+            <div class="p-5 flex-1 overflow-hidden flex flex-col">
+                <p class="text-xs text-gray-500 mb-2" id="edit-path"></p>
+                <textarea id="edit-content" class="flex-1 w-full border border-gray-300 rounded-md px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none" spellcheck="false"></textarea>
+                <p class="text-xs text-red-600 mt-2 hidden" id="edit-size-warn">文件过大（超过 1MB），仅支持编辑小文件。大文件请下载后本地编辑再上传。</p>
+            </div>
+            <div class="px-5 py-4 bg-gray-50 rounded-b-lg text-right">
+                <button class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md text-sm font-medium mr-2 transition-all" id="edit-cancel">取消</button>
+                <button class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-all" id="edit-save">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete confirm modal -->
+    <div class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40" id="delete-modal">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div class="px-5 py-5 text-center">
+                <div class="flex justify-center mb-3">
+                    <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                        <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-800 mb-2">确认删除</h3>
+                <p class="text-gray-600 text-sm" id="delete-msg"></p>
+            </div>
+            <div class="px-5 py-4 bg-gray-50 rounded-b-lg text-right">
+                <button class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md text-sm font-medium mr-2 transition-all" id="delete-cancel">取消</button>
+                <button class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-all" id="delete-ok">删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress toast -->
+    <div class="fixed bottom-6 right-6 z-50 space-y-2" id="toasts"></div>
+
+    <!-- Disconnect overlay -->
+    <div class="hidden fixed inset-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 items-center justify-center z-50" id="disconnect-overlay">
+        <div class="bg-white rounded-lg border border-gray-200 shadow-lg p-8 w-full max-w-md">
+            <div class="text-center">
+                <div class="flex justify-center mb-4">
+                    <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                        <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-800 mb-3">连接已断开</h1>
+                <p class="text-gray-600 mb-6">SFTP 会话已结束，令牌已失效。<br>请关闭此窗口，返回管理页面重新打开文件管理。</p>
+                <button class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-5 py-2 rounded-md text-sm font-medium transition-all" id="overlay-close">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/sftp.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const token = new URLSearchParams(window.location.search).get('token');
+            if (!token) {
+                alert('缺少访问令牌');
+                window.close();
+                return;
+            }
+            new SFTPUI(document.getElementById('container-name').textContent, token);
+        });
+    </script>
+</body>
+</html>

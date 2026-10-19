@@ -82,12 +82,12 @@
         <div class="flex justify-between items-center mb-4">
             <div class="text-sm font-bold text-gray-800">容器列表</div>
             <div class="flex gap-2">
-                <button onclick="showCreateModal()" class="px-3 py-1.5 text-xs font-medium text-gray-700 content-box hover:bg-gray-50 border border-gray-200 rounded-lg transition flex items-center gap-1.5">
+                <a href="/user/shop" class="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-1.5 shadow-sm">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
                     </svg>
-                    创建容器
-                </button>
+                    选购服务
+                </a>
                 <div class="join">
                     <button id="btnCardView" onclick="switchView('card')" class="px-2 py-1.5 text-xs font-medium content-box border border-gray-200 join-item hover:bg-gray-50">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -119,6 +119,10 @@
                     刷新
                 </button>
             </div>
+        </div>
+
+        <div class="mb-4 text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+            容器通过「选购服务」下单并完成支付后自动开通，配置规格与删除操作请联系管理员。
         </div>
 
         <div class="content-box rounded-lg border border-gray-200 p-4 mb-4 flex items-center justify-between">
@@ -175,170 +179,6 @@
             <p class="text-center py-8 text-gray-500">加载中...</p>
         </div>
     </div>
-
-    <div id="createModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 overflow-y-auto">
-        <div class="flex items-center justify-center min-h-screen p-4">
-            <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-                <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-                    <h2 class="text-xl font-bold text-gray-800">创建容器</h2>
-                    <button onclick="hideCreateModal()" class="text-gray-400 hover:text-gray-600">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
-                
-                <form id="createContainerForm" class="p-6">
-                    <div class="mb-6">
-                        <h3 class="text-lg font-semibold text-gray-800 mb-4">基础配置</h3>
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-1">备注</label>
-                            <input type="text" name="remark" maxlength="20" style="max-width: 20ch;" class="input input-bordered input-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="最多20个字符">
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">容器名称 <span class="text-red-500">*</span></label>
-                                <div class="flex gap-2">
-                                    <input type="text" id="inputHostname" name="name" required class="input input-bordered input-sm flex-1 outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如: my-container">
-                                    <button type="button" onclick="generateHostname()" class="px-3 py-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded">生成</button>
-                                </div>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Root密码</label>
-                                <div class="flex gap-2">
-                                    <input type="text" id="inputPassword" name="password" class="input input-bordered input-sm flex-1 outline-none focus:ring-2 focus:ring-blue-500" placeholder="留空自动生成">
-                                    <button type="button" onclick="generatePassword()" class="px-3 py-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded">生成</button>
-                                </div>
-                            </div>
-                            <div class="md:col-span-2">
-                                <label class="block text-sm font-medium text-gray-700 mb-1">镜像 <span class="text-red-500">*</span></label>
-                                <select name="image" id="selectImage" required class="select select-bordered select-sm w-full outline-none focus:ring-2 focus:ring-blue-500">
-                                    <option value="">请选择镜像</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mb-6">
-                        <h3 class="text-lg font-semibold text-gray-800 mb-4">资源配置</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">CPU核心数 <span class="text-red-500">*</span></label>
-                                <input type="number" name="cpu" required value="1" min="1" class="input input-bordered input-sm w-full outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">内存 MB <span class="text-red-500">*</span></label>
-                                <input type="number" name="memory" required value="256" min="1" class="input input-bordered input-sm w-full outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">硬盘 MB <span class="text-red-500">*</span></label>
-                                <input type="number" name="disk" required value="512" min="1" class="input input-bordered input-sm w-full outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mb-6">
-                        <h3 class="text-lg font-semibold text-gray-800 mb-4">规则配额</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">月流量限制 GB</label>
-                                <input type="number" name="traffic_limit" value="0" min="0" class="input input-bordered input-sm w-full outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">IPv4地址池</label>
-                                <input type="number" name="ipv4_pool_limit" value="0" min="0" class="input input-bordered input-sm w-full outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">IPv4端口映射</label>
-                                <input type="number" name="ipv4_mapping_limit" value="0" min="0" class="input input-bordered input-sm w-full outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">IPv6地址池</label>
-                                <input type="number" name="ipv6_pool_limit" value="0" min="0" class="input input-bordered input-sm w-full outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">IPv6端口映射</label>
-                                <input type="number" name="ipv6_mapping_limit" value="0" min="0" class="input input-bordered input-sm w-full outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">反向代理</label>
-                                <input type="number" name="reverse_proxy_limit" value="0" min="0" class="input input-bordered input-sm w-full outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                        </div>
-                        <p class="text-xs text-gray-500 mt-2">0 表示无配额</p>
-                    </div>
-
-                    <div class="flex justify-end gap-3 pt-4 border-t">
-                        <button type="button" onclick="hideCreateModal()" class="px-4 py-2 text-sm font-medium text-gray-700 content-box border border-gray-300 rounded-lg hover:bg-gray-50">取消</button>
-                        <button type="submit" id="btnCreateSubmit" class="px-4 py-2 text-sm font-medium text-gray-700 content-box hover:bg-gray-50 border border-gray-200 rounded-lg">创建容器</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <dialog id="updateConfigModal" class="modal">
-                        <div class="modal-box max-w-3xl">
-                            <h3 class="font-bold text-lg mb-4">更换配置 - <span id="configContainerName" class="text-teal-600"></span></h3>
-                            <form id="updateConfigForm" class="space-y-4">
-                                <input type="hidden" id="configTargetContainer" value="">
-                                <div>
-                                    <label class="block text-xs font-medium text-gray-700 mb-1">备注</label>
-                                    <input type="text" id="configRemark" name="remark" maxlength="20" class="input input-bordered input-sm" style="max-width: 20ch;" placeholder="最多20个字符">
-                                </div>
-                                <div>
-                                    <h4 class="text-sm font-semibold text-gray-800 mb-3">资源配置</h4>                            <div class="grid grid-cols-3 gap-4">
-                                <div>
-                                    <label class="block text-xs font-medium text-gray-700 mb-1">CPU核心数 <span class="text-red-500">*</span></label>
-                                    <input type="number" id="configCpu" name="cpu" required min="1" class="input input-bordered input-sm w-full">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-medium text-gray-700 mb-1">内存 MB <span class="text-red-500">*</span></label>
-                                    <input type="number" id="configMemory" name="memory" required min="1" class="input input-bordered input-sm w-full">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-medium text-gray-700 mb-1">硬盘 MB <span class="text-red-500">*</span></label>
-                                    <input type="number" id="configDisk" name="disk" required min="1" class="input input-bordered input-sm w-full">
-                                </div>
-                            </div>
-                        </div>
-                        <div>
-                            <h4 class="text-sm font-semibold text-gray-800 mb-3">规则配额</h4>                    <div class="grid grid-cols-3 gap-4">
-                        <div>
-                            <label class="block text-xs font-medium text-gray-700 mb-1">月流量限制 GB</label>
-                            <input type="number" id="configTrafficLimit" name="traffic_limit" min="0" class="input input-bordered input-sm w-full">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-gray-700 mb-1">IPv4地址池</label>
-                            <input type="number" id="configIPv4PoolLimit" name="ipv4_pool_limit" min="0" class="input input-bordered input-sm w-full">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-gray-700 mb-1">IPv4端口映射</label>
-                            <input type="number" id="configIPv4MappingLimit" name="ipv4_mapping_limit" min="0" class="input input-bordered input-sm w-full">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-gray-700 mb-1">IPv6地址池</label>
-                            <input type="number" id="configIPv6PoolLimit" name="ipv6_pool_limit" min="0" class="input input-bordered input-sm w-full">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-gray-700 mb-1">IPv6端口映射</label>
-                            <input type="number" id="configIPv6MappingLimit" name="ipv6_mapping_limit" min="0" class="input input-bordered input-sm w-full">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-gray-700 mb-1">反向代理</label>
-                            <input type="number" id="configReverseProxyLimit" name="reverse_proxy_limit" min="0" class="input input-bordered input-sm w-full">
-                        </div>
-                    </div>
-                    <p class="text-xs text-gray-500 mt-2">0 表示无配额</p>
-                </div>
-                <div class="modal-action">
-                    <button type="button" onclick="closeUpdateConfigModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg">取消</button>
-                    <button type="submit" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg">确认更新</button>
-                </div>
-            </form>
-        </div>
-        <form method="dialog" class="modal-backdrop"><button>关闭</button></form>
-    </dialog>
 
     <script>
         let currentView = localStorage.getItem('containerView') || 'card';
@@ -576,8 +416,6 @@
                             <div class="flex gap-2">
                                 <a href="/user/container?name=${c.name}" class="flex-1 px-2 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded transition text-center block">详情</a>
                                 <button onclick="syncContainer('${c.name}')" class="flex-1 px-2 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded transition">同步</button>
-                                <button onclick="showConfigModal('${c.name}')" class="flex-1 px-2 py-1.5 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded transition">配置</button>
-                                <button onclick="deleteContainer('${c.name}')" class="flex-1 px-2 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition">删除</button>
                             </div>
                         </div>
                     </div>
@@ -664,8 +502,6 @@
                             <div class="flex gap-1">
                                 <a href="/user/container?name=${c.name}" class="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition">详情</a>
                                 <button onclick="syncContainer('${c.name}')" class="px-2 py-1 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition">同步</button>
-                                <button onclick="showConfigModal('${c.name}')" class="px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition">配置</button>
-                                <button onclick="deleteContainer('${c.name}')" class="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition">删除</button>
                             </div>
                         </td>
                     </tr>
@@ -1116,185 +952,6 @@
             checkAndShowNotice();
         });
 
-        function showCreateModal() {
-            loadTemplates();
-            $('#createModal').removeClass('hidden');
-            $('body').addClass('overflow-hidden');
-        }
-
-        function hideCreateModal() {
-            $('#createModal').addClass('hidden');
-            $('body').removeClass('overflow-hidden');
-            $('#createContainerForm')[0].reset();
-            $('#selectImage').html('<option value="">请选择镜像</option>');
-        }
-
-        function loadTemplates() {
-            $.ajax({
-                url: '/api/user/templates',
-                type: 'GET',
-                success: function(result) {
-                    if (result.code === 200) {
-                        const templates = result.data || [];
-                        let options = '<option value="">请选择镜像</option>';
-                        templates.forEach(function(tpl) {
-                            options += `<option value="${tpl.fingerprint}">${tpl.alias} (${tpl.os} ${tpl.release})</option>`;
-                        });
-                        $('#selectImage').html(options);
-                    }
-                }
-            });
-        }
-
-        function generateHostname() {
-            const prefix = 'ct';
-            const randomNum = Math.floor(Math.random() * 900000) + 100000;
-            const hostname = prefix + randomNum;
-            $('#inputHostname').val(hostname);
-        }
-
-        function generatePassword() {
-            const chars = 'ABCDEFGHJKMNPQRSTWXYZabcdefghjkmnpqrstwxyz23456789';
-            let password = '';
-            for (let i = 0; i < 12; i++) {
-                password += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            $('#inputPassword').val(password);
-        }
-
-        $('#createContainerForm').on('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = $(this).serializeArray();
-            const data = {};
-            
-            formData.forEach(function(item) {
-                if (item.name === 'cpu' || item.name === 'memory' || item.name === 'disk' ||
-                    item.name === 'traffic_limit' || item.name === 'ipv4_pool_limit' ||
-                    item.name === 'ipv4_mapping_limit' || item.name === 'ipv6_pool_limit' ||
-                    item.name === 'ipv6_mapping_limit' || item.name === 'reverse_proxy_limit') {
-                    data[item.name] = parseInt(item.value) || 0;
-                } else {
-                    data[item.name] = item.value;
-                }
-            });
-            
-            $('#btnCreateSubmit').prop('disabled', true).text('创建中...');
-            
-            $.ajax({
-                url: '/api/user/containers',
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify(data),
-                success: function(result) {
-                    if (result.code === 200) {
-                        const taskId = result.data.task_id;
-                        if (taskId) {
-                            showToast('info', '容器创建中，请稍候...');
-                            hideCreateModal();
-                            pollTaskStatus(taskId);
-                        } else {
-                            showToast('success', '容器创建成功');
-                            hideCreateModal();
-                            loadContainers();
-                            loadUserInfo();
-                        }
-                    } else {
-                        showToast('error', result.msg || '创建容器失败');
-                        $('#btnCreateSubmit').prop('disabled', false).text('创建容器');
-                    }
-                },
-                error: function(xhr) {
-                    let errorMsg = '创建容器失败';
-                    try {
-                        const response = JSON.parse(xhr.responseText);
-                        errorMsg = response.msg || errorMsg;
-                    } catch (e) {}
-                    showToast('error', errorMsg);
-                    $('#btnCreateSubmit').prop('disabled', false).text('创建容器');
-                }
-            });
-        });
-
-        function pollTaskStatus(taskId) {
-            let pollCount = 0;
-            const maxPolls = 60;
-            
-            const poll = setInterval(function() {
-                pollCount++;
-                
-                $.ajax({
-                    url: '/api/user/tasks/' + taskId,
-                    type: 'GET',
-                    success: function(result) {
-                        if (result.code === 200) {
-                            const status = result.data.status;
-                            if (status === 'success') {
-                                clearInterval(poll);
-                                showToast('success', '容器创建成功');
-                                loadContainers();
-                                loadUserInfo();
-                                $('#btnCreateSubmit').prop('disabled', false).text('创建容器');
-                            } else if (status === 'failed') {
-                                clearInterval(poll);
-                                showToast('error', '容器创建失败: ' + (result.data.error_msg || '未知错误'));
-                                $('#btnCreateSubmit').prop('disabled', false).text('创建容器');
-                            }
-                        }
-                    },
-                    error: function() {
-                        if (pollCount >= maxPolls) {
-                            clearInterval(poll);
-                            showToast('warning', '创建超时，请刷新页面查看');
-                            loadContainers();
-                            $('#btnCreateSubmit').prop('disabled', false).text('创建容器');
-                        }
-                    }
-                });
-                
-                if (pollCount >= maxPolls) {
-                    clearInterval(poll);
-                    showToast('warning', '创建超时，请刷新页面查看');
-                    loadContainers();
-                    $('#btnCreateSubmit').prop('disabled', false).text('创建容器');
-                }
-            }, 2000);
-        }
-
-        function deleteContainer(name) {
-            if (!confirm('确定要删除容器 ' + name + ' 吗？此操作不可恢复！')) {
-                return;
-            }
-            
-            $.ajax({
-                url: '/api/user/containers/' + name,
-                type: 'DELETE',
-                success: function(result) {
-                    if (result.code === 200) {
-                        const taskId = result.data && result.data.task_id;
-                        if (taskId) {
-                            showToast('info', '删除任务已提交，请稍候...');
-                            pollTaskStatus(taskId);
-                        } else {
-                            showToast('success', '删除成功');
-                            loadContainers();
-                            loadUserInfo();
-                        }
-                    } else {
-                        showToast('error', result.msg || '删除失败');
-                    }
-                },
-                error: function(xhr) {
-                    let errorMsg = '删除失败';
-                    try {
-                        const response = JSON.parse(xhr.responseText);
-                        errorMsg = response.msg || errorMsg;
-                    } catch (e) {}
-                    showToast('error', errorMsg);
-                }
-            });
-        }
-
         function suspendContainer(name) {
             $.ajax({
                 url: '/api/user/containers/' + name + '/action?action=suspend',
@@ -1330,125 +987,6 @@
                 }
             });
         }
-
-        function showConfigModal(name) {
-            $.ajax({
-                url: '/api/user/containers/' + name + '/config',
-                type: 'GET',
-                success: function(result) {
-                    if (result.code === 200) {
-                        const d = result.data;
-                        $('#configTargetContainer').val(name);
-                        $('#configContainerName').text(name);
-
-                        $('#configCpu').val(d.cpu);
-                        $('#configMemory').val(d.memory);
-                        $('#configDisk').val(d.disk);
-                        $('#configTrafficLimit').val(d.traffic_limit);
-                        $('#configIPv4PoolLimit').val(d.ipv4_pool_limit || 0);
-                        $('#configIPv4MappingLimit').val(d.ipv4_mapping_limit || 0);
-                        $('#configIPv6PoolLimit').val(d.ipv6_pool_limit || 0);
-                        $('#configIPv6MappingLimit').val(d.ipv6_mapping_limit || 0);
-                        $('#configReverseProxyLimit').val(d.reverse_proxy_limit || 0);
-                        $('#configRemark').val(d.remark || '').data('original', d.remark || '');
-                        document.getElementById('updateConfigModal').showModal();
-                    } else {
-                        showToast('error', '获取容器配置失败');
-                    }
-                },
-                error: function() {
-                    showToast('error', '获取容器配置失败');
-                }
-            });
-        }
-
-        function closeUpdateConfigModal() {
-            document.getElementById('updateConfigModal').close();
-            $('#updateConfigForm')[0].reset();
-            $('#configTargetContainer').val('');
-            $('#configContainerName').text('');
-        }
-
-        $(document).on('submit', '#updateConfigForm', function(e) {
-            e.preventDefault();
-            const name = $('#configTargetContainer').val();
-            if (!name) {
-                showToast('error', '容器名称为空');
-                return;
-            }
-
-            const data = {
-                cpu: parseInt($('#configCpu').val()) || 0,
-                memory: parseInt($('#configMemory').val()) || 0,
-                disk: parseInt($('#configDisk').val()) || 0,
-                traffic_limit: parseInt($('#configTrafficLimit').val()) || 0,
-                ipv4_pool_limit: parseInt($('#configIPv4PoolLimit').val()) || 0,
-                ipv4_mapping_limit: parseInt($('#configIPv4MappingLimit').val()) || 0,
-                ipv6_pool_limit: parseInt($('#configIPv6PoolLimit').val()) || 0,
-                ipv6_mapping_limit: parseInt($('#configIPv6MappingLimit').val()) || 0,
-                reverse_proxy_limit: parseInt($('#configReverseProxyLimit').val()) || 0
-            };
-
-            const remarkVal = $('#configRemark').val();
-            const remarkChanged = remarkVal !== ($('#configRemark').data('original') || '');
-
-            $.ajax({
-                url: '/api/user/containers/' + name + '/config',
-                type: 'PUT',
-                contentType: 'application/json',
-                data: JSON.stringify(data),
-                success: function(result) {
-                    if (result.code === 200) {
-                        const taskId = result.data && result.data.task_id;
-                        
-                        if (remarkChanged) {
-                            $.ajax({
-                                url: '/api/user/containers/' + name + '/remark',
-                                type: 'PUT',
-                                contentType: 'application/json',
-                                data: JSON.stringify({ remark: remarkVal }),
-                                success: function() {
-                                    closeUpdateConfigModal();
-                                    if (taskId) {
-                                        showToast('info', '配置更新中，请稍候...');
-                                        pollTaskStatus(taskId);
-                                    } else {
-                                        showToast('success', '配置更新成功');
-                                        loadContainers();
-                                        loadUserInfo();
-                                    }
-                                },
-                                error: function() {
-                                    showToast('warning', '配置更新成功，但备注更新失败');
-                                    closeUpdateConfigModal();
-                                    loadContainers();
-                                }
-                            });
-                        } else {
-                            closeUpdateConfigModal();
-                            if (taskId) {
-                                showToast('info', '配置更新中，请稍候...');
-                                pollTaskStatus(taskId);
-                            } else {
-                                showToast('success', '配置更新成功');
-                                loadContainers();
-                                loadUserInfo();
-                            }
-                        }
-                    } else {
-                        showToast('error', result.msg || '更新失败');
-                    }
-                },
-                error: function(xhr) {
-                    let errorMsg = '更新失败';
-                    try {
-                        const response = JSON.parse(xhr.responseText);
-                        errorMsg = response.msg || errorMsg;
-                    } catch (e) {}
-                    showToast('error', errorMsg);
-                }
-            });
-        });
     </script>
 </body>
 </html>

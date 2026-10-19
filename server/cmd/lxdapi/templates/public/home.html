@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .SiteName }} - LXD 容器云平台</title>
+    <meta name="description" content="{{ .SiteName }} 提供 LXD 容器一键开通、自动部署、反代与端口转发，多节点弹性调度，面向开发者的轻量云主机服务。">
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    <script src="/static/js/iconify.min.js"></script>
+    {{else}}
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
+    {{end}}
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .hero-grad { background: radial-gradient(1200px 600px at 20% 10%, rgba(59,130,246,.25), transparent 60%), radial-gradient(1000px 500px at 90% 30%, rgba(99,102,241,.22), transparent 60%), linear-gradient(180deg, #0b1220 0%, #0f172a 60%, #111827 100%); }
+        .glass { background: rgba(255,255,255,.06); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.12); }
+        .card { background: #fff; border: 1px solid #e5e7eb; }
+        .price-num { font-variant-numeric: tabular-nums; }
+        .line-clamp-1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+    </style>
+</head>
+<body class="text-gray-800" style="background:#f9fafb">
+
+<!-- 顶部导航 -->
+<header class="sticky top-0 z-50 bg-white/80 backdrop-blur border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6">
+        <div class="flex items-center justify-between h-16">
+            <div class="flex items-center gap-2">
+                <div class="bg-gradient-to-br from-blue-500 to-indigo-600 p-2 rounded-xl shadow">
+                    <span class="iconify text-white" data-icon="mdi:cloud-outline" data-width="20"></span>
+                </div>
+                <span class="text-lg font-bold text-gray-900">{{ .SiteName }}</span>
+            </div>
+            <nav class="hidden md:flex items-center gap-8 text-sm text-gray-600">
+                <a href="#features" class="hover:text-blue-600 transition">核心能力</a>
+                <a href="#pricing" class="hover:text-blue-600 transition">套餐价格</a>
+                <a href="#faq" class="hover:text-blue-600 transition">常见问题</a>
+            </nav>
+            <div class="flex items-center gap-3">
+                <a href="/user/login" class="text-sm text-gray-600 hover:text-gray-900 transition">登录</a>
+                <a href="{{if .RegisterEnabled}}/user/register{{else}}/user/login{{end}}"
+                   class="text-sm font-medium px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-lg transition shadow">
+                    立即开通
+                </a>
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- Hero -->
+<section class="hero-grad text-white">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
+        <div class="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+                <div class="inline-flex items-center gap-2 glass rounded-full px-3 py-1.5 text-xs sm:text-sm mb-5">
+                    <span class="iconify" data-icon="mdi:rocket-outline" data-width="16"></span>
+                    基于 LXD 的轻量容器云
+                </div>
+                <h1 class="text-3xl sm:text-5xl font-extrabold leading-tight mb-4">
+                    数秒开通一台<br>属于你的云容器
+                </h1>
+                <p class="text-gray-300 text-base sm:text-lg mb-8 leading-relaxed">
+                    自动部署、反代域名、端口转发、面板入口一应俱全。多节点弹性调度，
+                    从开发机到生产环境，开箱即用。
+                </p>
+                <div class="flex flex-wrap gap-3">
+                    <a href="{{if .RegisterEnabled}}/user/register{{else}}/user/login{{end}}"
+                       class="px-6 py-3 rounded-xl bg-white text-gray-900 font-semibold hover:shadow-xl transition shadow-lg">
+                        免费开始
+                    </a>
+                    <a href="#pricing" class="px-6 py-3 rounded-xl glass text-white font-semibold hover:bg-white/10 transition">
+                        查看套餐
+                    </a>
+                </div>
+                <div class="flex flex-wrap gap-6 mt-8 text-sm text-gray-300">
+                    <div class="flex items-center gap-2"><span class="iconify text-blue-400" data-icon="mdi:clock-fast-outline"></span>秒级开通</div>
+                    <div class="flex items-center gap-2"><span class="iconify text-blue-400" data-icon="mdi:shield-check-outline"></span>稳定可靠</div>
+                    <div class="flex items-center gap-2"><span class="iconify text-blue-400" data-icon="mdi:server-network"></span>多节点调度</div>
+                </div>
+            </div>
+            <div class="glass rounded-2xl p-6 sm:p-8 hidden lg:block">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-xs text-gray-400">实时状态</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-300">运行中</span>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between glass rounded-lg px-4 py-3">
+                        <div class="flex items-center gap-3">
+                            <span class="iconify" data-icon="mdi:docker" data-width="20"></span>
+                            <div>
+                                <div class="text-sm font-medium">web-prod-01</div>
+                                <div class="text-xs text-gray-400">node-a · 10.0.0.12</div>
+                            </div>
+                        </div>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300">已启用</span>
+                    </div>
+                    <div class="flex items-center justify-between glass rounded-lg px-4 py-3">
+                        <div class="flex items-center gap-3">
+                            <span class="iconify" data-icon="mdi:database" data-width="20"></span>
+                            <div>
+                                <div class="text-sm font-medium">db-main</div>
+                                <div class="text-xs text-gray-400">node-b · 10.0.1.7</div>
+                            </div>
+                        </div>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300">已启用</span>
+                    </div>
+                    <div class="flex items-center justify-between glass rounded-lg px-4 py-3">
+                        <div class="flex items-center gap-3">
+                            <span class="iconify" data-icon="mdi:file-tree" data-width="20"></span>
+                            <div>
+                                <div class="text-sm font-medium">ci-runner</div>
+                                <div class="text-xs text-gray-400">node-a · 10.0.0.33</div>
+                            </div>
+                        </div>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-300">已停止</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- 核心能力 -->
+<section id="features" class="py-16 sm:py-24">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6">
+        <div class="text-center mb-12">
+            <h2 class="text-2xl sm:text-4xl font-extrabold text-gray-900 mb-3">核心能力</h2>
+            <p class="text-gray-500 max-w-2xl mx-auto">从开通到运维，全链路自动化，省去繁琐的底层运维。</p>
+        </div>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="card rounded-2xl p-6 hover:shadow-lg hover:-translate-y-1 transition duration-300">
+                <div class="bg-blue-50 text-blue-600 p-3 rounded-xl w-fit mb-4"><span class="iconify" data-icon="mdi:cloud" data-width="24"></span></div>
+                <h3 class="text-lg font-bold text-gray-900 mb-2">一键开通容器</h3>
+                <p class="text-sm text-gray-600 leading-relaxed">选择套餐后自动完成 LXD 容器创建、网络与存储配置，无需手动操作。</p>
+            </div>
+            <div class="card rounded-2xl p-6 hover:shadow-lg hover:-translate-y-1 transition duration-300">
+                <div class="bg-indigo-50 text-indigo-600 p-3 rounded-xl w-fit mb-4"><span class="iconify" data-icon="mdi:web" data-width="24"></span></div>
+                <h3 class="text-lg font-bold text-gray-900 mb-2">反代域名接入</h3>
+                <p class="text-sm text-gray-600 leading-relaxed">自动为你的容器绑定域名与端口转发，直接上线对外服务。</p>
+            </div>
+            <div class="card rounded-2xl p-6 hover:shadow-lg hover:-translate-y-1 transition duration-300">
+                <div class="bg-violet-50 text-violet-600 p-3 rounded-xl w-fit mb-4"><span class="iconify" data-icon="mdi:server" data-width="24"></span></div>
+                <h3 class="text-lg font-bold text-gray-900 mb-2">多节点弹性调度</h3>
+                <p class="text-sm text-gray-600 leading-relaxed">底层 LXD 集群按节点自动分配资源，扩展透明，容量灵活。</p>
+            </div>
+            <div class="card rounded-2xl p-6 hover:shadow-lg hover:-translate-y-1 transition duration-300">
+                <div class="bg-cyan-50 text-cyan-600 p-3 rounded-xl w-fit mb-4"><span class="iconify" data-icon="mdi:monitor" data-width="24"></span></div>
+                <h3 class="text-lg font-bold text-gray-900 mb-2">可视化面板</h3>
+                <p class="text-sm text-gray-600 leading-relaxed">每个容器独立面板入口，实时监控资源与日志，运维所见即所得。</p>
+            </div>
+            <div class="card rounded-2xl p-6 hover:shadow-lg hover:-translate-y-1 transition duration-300">
+                <div class="bg-amber-50 text-amber-600 p-3 rounded-xl w-fit mb-4"><span class="iconify" data-icon="mdi:cash-multiple" data-width="24"></span></div>
+                <h3 class="text-lg font-bold text-gray-900 mb-2">余额与自动续费</h3>
+                <p class="text-sm text-gray-600 leading-relaxed">统一余额账户支持充值与自动续费，到期不断服务，省心省力。</p>
+            </div>
+            <div class="card rounded-2xl p-6 hover:shadow-lg hover:-translate-y-1 transition duration-300">
+                <div class="bg-green-50 text-green-600 p-3 rounded-xl w-fit mb-4"><span class="iconify" data-icon="mdi:headset" data-width="24"></span></div>
+                <h3 class="text-lg font-bold text-gray-900 mb-2">工单与站内通知</h3>
+                <p class="text-sm text-gray-600 leading-relaxed">随时发起工单获取支持，消息与公告实时推送，响应及时。</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- 套餐价格 -->
+<section id="pricing" class="py-16 sm:py-24" style="background:#f3f4f6">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6">
+        <div class="text-center mb-12">
+            <h2 class="text-2xl sm:text-4xl font-extrabold text-gray-900 mb-3">套餐价格</h2>
+            <p class="text-gray-500 max-w-2xl mx-auto">按需选择，随时开通，价格透明。</p>
+        </div>
+        <div id="pricingGrid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        <div id="pricingEmpty" class="text-center py-10 text-gray-500 hidden">
+            暂无在售套餐，请关注后续发布。
+        </div>
+    </div>
+</section>
+
+<!-- 使用流程 -->
+<section class="py-16 sm:py-24">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6">
+        <div class="text-center mb-12">
+            <h2 class="text-2xl sm:text-4xl font-extrabold text-gray-900 mb-3">三步开始使用</h2>
+        </div>
+        <div class="grid md:grid-cols-3 gap-8">
+            <div class="text-center">
+                <div class="mx-auto w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl font-bold mb-4">1</div>
+                <h3 class="text-lg font-bold text-gray-900 mb-2">选择套餐</h3>
+                <p class="text-sm text-gray-600">浏览在售套餐，挑选最合适的规格。</p>
+            </div>
+            <div class="text-center">
+                <div class="mx-auto w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-2xl font-bold mb-4">2</div>
+                <h3 class="text-lg font-bold text-gray-900 mb-2">支付开通</h3>
+                <p class="text-sm text-gray-600">使用余额或在线支付，系统自动创建容器。</p>
+            </div>
+            <div class="text-center">
+                <div class="mx-auto w-14 h-14 rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center text-2xl font-bold mb-4">3</div>
+                <h3 class="text-lg font-bold text-gray-900 mb-2">面板运维</h3>
+                <p class="text-sm text-gray-600">进入容器面板，反代、端口、监控随时管理。</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" class="py-16 sm:py-24" style="background:#f3f4f6">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6">
+        <div class="text-center mb-10">
+            <h2 class="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-3">常见问题</h2>
+        </div>
+        <div class="space-y-4">
+            <details class="card rounded-xl p-5 group">
+                <summary class="cursor-pointer font-semibold text-gray-900 flex items-center justify-between">容器开通后多久可用？<span class="iconify text-gray-400 group-open:rotate-180 transition" data-icon="mdi:chevron-down"></span></summary>
+                <p class="mt-3 text-sm text-gray-600 leading-relaxed">通常几秒到一两分钟内完成自动部署，开通成功后即可登录面板使用。</p>
+            </details>
+            <details class="card rounded-xl p-5 group">
+                <summary class="cursor-pointer font-semibold text-gray-900 flex items-center justify-between">支持绑定自己的域名吗？<span class="iconify text-gray-400 group-open:rotate-180 transition" data-icon="mdi:chevron-down"></span></summary>
+                <p class="mt-3 text-sm text-gray-600 leading-relaxed">支持。通过反向代理与端口转发，可直接将域名解析到你的容器服务。</p>
+            </details>
+            <details class="card rounded-xl p-5 group">
+                <summary class="cursor-pointer font-semibold text-gray-900 flex items-center justify-between">到期后服务会中断吗？<span class="iconify text-gray-400 group-open:rotate-180 transition" data-icon="mdi:chevron-down"></span></summary>
+                <p class="mt-3 text-sm text-gray-600 leading-relaxed">可开启自动续费，余额充足时到期自动续期，避免服务中断。</p>
+            </details>
+            <details class="card rounded-xl p-5 group">
+                <summary class="cursor-pointer font-semibold text-gray-900 flex items-center justify-between">遇到问题如何获得帮助？<span class="iconify text-gray-400 group-open:rotate-180 transition" data-icon="mdi:chevron-down"></span></summary>
+                <p class="mt-3 text-sm text-gray-600 leading-relaxed">在用户中心提交工单，并留意站内消息与公告，我们会尽快响应处理。</p>
+            </details>
+        </div>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="py-16 sm:py-24 hero-grad text-white">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 text-center">
+        <h2 class="text-2xl sm:text-4xl font-extrabold mb-4">准备好开始了吗？</h2>
+        <p class="text-gray-300 mb-8 text-base sm:text-lg">立即开通你的第一台云容器，几分钟内上线你的服务。</p>
+        <a href="{{if .RegisterEnabled}}/user/register{{else}}/user/login{{end}}"
+           class="inline-block px-8 py-3.5 rounded-xl bg-white text-gray-900 font-bold hover:shadow-2xl transition shadow-lg">
+            免费开通
+        </a>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer class="bg-gray-900 text-gray-400">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-10">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-2 text-white">
+                <span class="iconify" data-icon="mdi:cloud-outline" data-width="20"></span>
+                <span class="font-bold">{{ .SiteName }}</span>
+            </div>
+            <div class="text-sm">
+                {{ .FooterText }}
+            </div>
+            <div class="text-xs text-gray-500">Version {{ .Version }}</div>
+        </div>
+    </div>
+</footer>
+
+<script>
+    $(function () {
+        function fmtPrice(p) {
+            var m = p.price_monthly;
+            if (m !== null && m !== undefined && m > 0) return String(m);
+            var h = p.price_hourly;
+            if (h !== null && h !== undefined && h > 0) return String(h) + '/时';
+            return '0';
+        }
+        $.get('/api/public/products', function (res) {
+            if (res.code !== 200) return;
+            var list = res.data || [];
+            if (!list.length) {
+                document.getElementById('pricingEmpty').classList.remove('hidden');
+                return;
+            }
+            var html = list.map(function (p) {
+                var spec = [];
+                if (p.cpu) spec.push(p.cpu + ' 核 CPU');
+                if (p.memory) spec.push(p.memory + ' MB 内存');
+                if (p.disk) spec.push(p.disk + ' GB 磁盘');
+                if (p.bandwidth) spec.push(p.bandwidth + ' Mbps 带宽');
+                var badge = p.node_name ? '<span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">' + p.node_name + '</span>' : '';
+                return '<div class="card rounded-2xl p-6 flex flex-col hover:shadow-xl transition duration-300">' +
+                    '<div class="flex items-center justify-between mb-2">' +
+                    '<h3 class="text-lg font-bold text-gray-900">' + (p.name || '套餐') + '</h3>' + badge +
+                    '</div>' +
+                    (p.description ? '<p class="text-xs text-gray-500 mb-3 line-clamp-1">' + p.description + '</p>' : '') +
+                    '<div class="flex flex-wrap gap-2 mb-4">' +
+                    (spec.length ? spec.map(function (s) { return '<span class="text-xs px-2 py-1 rounded-md bg-blue-50 text-blue-700">' + s + '</span>'; }).join('') : '<span class="text-xs text-gray-400">规格由管理员配置</span>') +
+                    '</div>' +
+                    '<div class="flex items-end gap-1 mb-4"><span class="text-3xl font-extrabold text-gray-900 price-num">¥' + fmtPrice(p) + '</span><span class="text-sm text-gray-500 mb-1">/月</span></div>' +
+                    '<a href="/user/login" class="mt-auto block text-center px-4 py-2.5 rounded-lg font-medium text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-lg transition">立即开通</a>' +
+                    '</div>';
+            }).join('');
+            document.getElementById('pricingGrid').innerHTML = html;
+        });
+    });
+</script>
+</body>
+</html>

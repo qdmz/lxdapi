@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <link href="/static/css/daisyui.min.css" rel="stylesheet">
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    {{else}}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {{end}}
+    <style>
+        .content-box { background-color: rgba(255,255,255, calc(85 / 100)) !important; }
+        .plan-card { transition: all .25s ease; }
+        .plan-card:hover { transform: translateY(-3px); box-shadow: 0 12px 24px -10px rgba(37,99,235,.25); }
+        .pay-tab { transition: all .2s ease; }
+        .pay-tab.active { background: #2563eb; color: #fff; }
+    </style>
+</head>
+<body class="relative min-h-screen flex flex-col">
+{{template "user/user_header.html" .}}
+<div class="flex-1 relative" style="background-color:#f4f7fb">
+<div class="relative container mx-auto px-4 py-8" style="z-index:1">
+
+    <!-- 顶部 -->
+    <div class="content-box rounded-xl border border-gray-200 p-5 mb-6 shadow-sm">
+        <h1 class="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <span class="iconify text-blue-600" data-icon="mdi:rocket-launch-outline" data-width="24"></span>
+            选购服务
+        </h1>
+        <p class="text-sm text-gray-500 mt-1">选择套餐完成支付后，系统将自动为你开通对应容器，无需人工干预。</p>
+        <div id="payWarn" class="hidden mt-3 text-sm rounded-lg px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200">
+            当前支付功能未开启，请联系管理员配置易支付后再下单。
+        </div>
+    </div>
+
+    <!-- 账户余额与自动续费 -->
+    <div class="content-box rounded-xl border border-gray-200 p-5 mb-6 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-6">
+                <div>
+                    <div class="text-xs text-gray-500 mb-1">账户余额</div>
+                    <div class="text-2xl font-bold text-emerald-600">¥ <span id="balanceVal">0.00</span></div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500 mb-1">自动续费</div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="autoRenewToggle" class="sr-only peer">
+                        <div class="w-9 h-5 bg-gray-200 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition peer-checked:after:translate-x-4"></div>
+                        <span class="ml-2 text-xs text-gray-600" id="autoRenewLabel">已关闭</span>
+                    </label>
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="flex items-center gap-2">
+                    <input type="number" id="rechargeAmount" min="1" max="100000" step="1" value="100"
+                        class="w-24 px-3 py-1.5 border border-gray-300 rounded text-sm">
+                    <button onclick="doRecharge()" id="rechargeBtn"
+                        class="px-4 py-1.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm">余额充值</button>
+                </div>
+            </div>
+        </div>
+        <p class="text-xs text-gray-400 mt-3">开启自动续费后，容器到期前 24 小时内系统将自动用余额完成续费；余额不足时会发送充值提醒。</p>
+    </div>
+
+    <!-- 充值结果弹窗 -->
+    <div id="rechargeModal" class="fixed inset-0 hidden items-center justify-center bg-black/50 z-50 p-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-sm text-center p-6">
+            <span id="rechargeIcon" class="iconify text-5xl text-emerald-600 block mb-3" data-icon="mdi:cash-fast" data-width="48"></span>
+            <h3 class="text-lg font-semibold text-gray-800 mb-1" id="rechargeTitle">充值下单</h3>
+            <p class="text-sm text-gray-500 mb-4" id="rechargeDesc">请在支付窗口完成付款。</p>
+            <div class="space-y-2">
+                <button id="rechargeOpenBtn" class="hidden w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">打开支付窗口</button>
+                <button onclick="closeRecharge()" class="w-full px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 分类筛选 -->
+    <div class="flex flex-wrap items-center gap-2 mb-5">
+        <button data-cat="" class="pay-tab active px-4 py-2 text-sm font-medium rounded-lg bg-white border border-gray-200 hover:bg-gray-50">全部</button>
+        <button data-cat="lxc" class="pay-tab px-4 py-2 text-sm font-medium rounded-lg bg-white border border-gray-200 hover:bg-gray-50">LXC 容器</button>
+        <button data-cat="kvm" class="pay-tab px-4 py-2 text-sm font-medium rounded-lg bg-white border border-gray-200 hover:bg-gray-50">KVM 虚拟机</button>
+        <button data-cat="vm" class="pay-tab px-4 py-2 text-sm font-medium rounded-lg bg-white border border-gray-200 hover:bg-gray-50">VM</button>
+    </div>
+
+    <!-- 产品网格 -->
+    <div id="productGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+    <div id="emptyTip" class="hidden text-center py-16 text-gray-400">
+        <span class="iconify text-4xl block mb-3" data-icon="mdi:package-remove-outline"></span>
+        暂无可购买产品，请先联系管理员上架产品
+    </div>
+
+    <!-- 购买弹窗 -->
+    <div id="buyModal" class="fixed inset-0 hidden items-center justify-center bg-black/50 z-50 p-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[92vh] overflow-y-auto">
+            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h3 class="text-base font-semibold text-gray-800" id="buyTitle">购买</h3>
+                <button onclick="closeBuy()" class="text-gray-400 hover:text-gray-600"><span class="iconify" data-icon="mdi:close" data-width="20"></span></button>
+            </div>
+            <div class="px-5 py-4 space-y-4">
+                <div id="buySpec" class="text-sm text-gray-600 space-y-1"></div>
+                <div>
+                    <div class="text-xs text-gray-600 mb-2">计费周期</div>
+                    <div class="grid grid-cols-2 gap-2" id="cycleGroup"></div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div class="text-xs text-gray-600">支付方式</div>
+                    <div class="flex flex-col gap-1.5" id="payTypeGroup">
+                        <label class="flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="radio" name="payType" value="balance" id="payTypeBalance" class="accent-emerald-600"> 余额支付 <span class="text-xs text-gray-400">(当前 ¥<span id="buyBalanceHint">0.00</span>)</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="radio" name="payType" value="alipay" checked class="accent-blue-600"> 第三方支付
+                        </label>
+                    </div>
+                </div>
+                <div class="flex items-end justify-between">
+                    <div>
+                        <div class="text-xs text-gray-600">应付金额</div>
+                        <div class="text-2xl font-bold text-blue-600">¥ <span id="buyTotal">0.00</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+                <button onclick="closeBuy()" class="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">取消</button>
+                <button onclick="doBuy()" class="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm" id="buyBtn">立即购买</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 支付结果弹窗 -->
+    <div id="payModal" class="fixed inset-0 hidden items-center justify-center bg-black/50 z-50 p-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-sm text-center p-6">
+            <span id="payIcon" class="iconify text-5xl text-blue-600 block mb-3" data-icon="mdi:qrcode-scan" data-width="48"></span>
+            <h3 class="text-lg font-semibold text-gray-800 mb-1" id="payTitle">支付中</h3>
+            <p class="text-sm text-gray-500 mb-4" id="payDesc">正在跳转支付…</p>
+            <div class="space-y-2">
+                <button id="payOpenBtn" class="hidden w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">打开支付窗口</button>
+                <button onclick="closePay()" class="w-full px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg">查看我的订单</button>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<script>
+var API = '/api/user';
+var PAPI = '/api/public';
+var products = [];
+var current = null;
+var currentCycle = 'monthly';
+var payEnabled = false;
+var myBalance = 0;
+
+var cycles = [
+    { key: 'hourly', label: '时付', field: 'price_hourly', suffix: '/时' },
+    { key: 'monthly', label: '月付', field: 'price_monthly', suffix: '/月' },
+    { key: 'quarterly', label: '季付', field: 'price_quarterly', suffix: '/季' },
+    { key: 'yearly', label: '年付', field: 'price_yearly', suffix: '/年' }
+];
+
+function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+
+function priceOf(p, c) {
+    var f = cycles.filter(function (x) { return x.key === c; })[0];
+    return f ? (p[f.field] || 0) : 0;
+}
+
+function loadProducts() {
+    $.get(PAPI + '/products', function (r) {
+        products = (r && r.data) || [];
+        var cat = $('.pay-tab.active').data('cat');
+        renderProducts(cat);
+    });
+    $.get(PAPI + '/pay-status', function (r) {
+        payEnabled = !!(r && r.data && r.data.enabled);
+        document.getElementById('payWarn').classList.toggle('hidden', payEnabled);
+    });
+    loadAccount();
+}
+
+function loadAccount() {
+    $.get(API + '/balance', function (r) {
+        if (r && r.code === 200 && r.data) {
+            myBalance = r.data.balance || 0;
+            document.getElementById('balanceVal').textContent = myBalance.toFixed(2);
+            var on = !!r.data.auto_renew;
+            document.getElementById('autoRenewToggle').checked = on;
+            document.getElementById('autoRenewLabel').textContent = on ? '已开启' : '已关闭';
+        }
+    });
+    var t = document.getElementById('autoRenewToggle');
+    t.addEventListener('change', function () {
+        $.ajax({
+            url: API + '/auto-renew', type: 'POST', contentType: 'application/json',
+            data: JSON.stringify({ auto_renew: t.checked }),
+            success: function (r) {
+                document.getElementById('autoRenewLabel').textContent = t.checked ? '已开启' : '已关闭';
+                if (r.code !== 200) { alert(r.msg || '设置失败'); t.checked = !t.checked; }
+            },
+            error: function () { alert('网络错误'); t.checked = !t.checked; }
+        });
+    });
+}
+
+function doRecharge() {
+    var amt = parseFloat(document.getElementById('rechargeAmount').value);
+    if (!amt || amt < 1) { alert('请输入有效的充值金额（≥1 元）'); return; }
+    var btn = document.getElementById('rechargeBtn');
+    btn.disabled = true; btn.textContent = '下单中…';
+    $.ajax({
+        url: API + '/orders/recharge', type: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ amount: amt, pay_type: 'alipay' }),
+        success: function (r) {
+            btn.disabled = false; btn.textContent = '余额充值';
+            if (r.code === 200 && r.data && r.data.pay_url) {
+                openRechargeModal(r.data.order, r.data.pay_url);
+            } else {
+                alert(r.msg || '充值下单失败');
+            }
+        },
+        error: function () { btn.disabled = false; btn.textContent = '余额充值'; alert('网络错误，请稍后重试'); }
+    });
+}
+
+function openRechargeModal(order, payUrl) {
+    document.getElementById('rechargeTitle').textContent = '充值 ' + Number(order.amount).toFixed(2) + ' 元';
+    document.getElementById('rechargeDesc').textContent = '订单号 ' + order.order_no + '，请在支付窗口完成付款，到账后可用于支付订单或自动续费。';
+    var openBtn = document.getElementById('rechargeOpenBtn');
+    openBtn.classList.remove('hidden');
+    openBtn.onclick = function () { window.open(payUrl, '_blank'); };
+    showEl('rechargeModal');
+}
+function closeRecharge() { hideEl('rechargeModal'); loadAccount(); }
+
+function renderProducts(cat) {
+    var grid = document.getElementById('productGrid');
+    var list = products.filter(function (p) { return !cat || p.category === cat; });
+    document.getElementById('emptyTip').classList.toggle('hidden', list.length > 0);
+    if (!list.length) { grid.innerHTML = ''; return; }
+    grid.innerHTML = list.map(function (p) {
+        var badge = p.stock >= 0 ? '<span class="text-xs px-2 py-0.5 rounded bg-' + (p.stock === 0 ? 'red-100 text-red-600' : 'gray-100 text-gray-500') + '">' + (p.stock === 0 ? '售罄' : '库存 ' + p.stock) + '</span>' : '';
+        var node = p.node_name ? '<span class="text-xs text-gray-400">' + esc(p.node_name) + (p.node_region ? ' · ' + esc(p.node_region) : '') + '</span>' : '';
+        var minPrice = Math.min.apply(null, cycles.map(function (c) { return priceOf(p, c.key); }).filter(function (v) { return v > 0; }).concat([99999]));
+        var spec = [
+            p.cpu ? p.cpu + ' 核' : '',
+            p.memory ? (p.memory / 1024).toFixed(p.memory % 1024 ? 1 : 0) + ' GB' : '',
+            p.disk ? p.disk + ' GB' : '',
+            p.bandwidth ? p.bandwidth + ' Mbps' : '',
+            p.traffic_limit ? p.traffic_limit + ' GB 流量' : ''
+        ].filter(Boolean).join(' · ') || '基础配置';
+        return '<div class="plan-card content-box rounded-xl border border-gray-200 p-5 shadow-sm flex flex-col">' +
+            '<div class="flex items-start justify-between mb-2">' +
+                '<div>' +
+                    '<div class="flex items-center gap-2 mb-1"><span class="text-base font-bold text-gray-800">' + esc(p.name) + '</span>' + badge + '</div>' +
+                    '<div class="text-xs text-gray-400 mb-1">' + esc(p.category || 'lxc').toUpperCase() + '</div>' + node +
+                '</div>' +
+            '</div>' +
+            '<div class="text-sm text-gray-600 mb-3 flex-1">' + esc(spec) + '</div>' +
+            '<div class="mb-4">' +
+                '<span class="text-2xl font-bold text-blue-600">¥ ' + (minPrice < 99999 ? Number(minPrice).toFixed(2) : '0.00') + '</span>' +
+                (minPrice < 99999 ? '<span class="text-xs text-gray-400 ml-1">起</span>' : '') +
+            '</div>' +
+            '<button ' + (p.stock === 0 ? 'disabled' : 'onclick="openBuy(' + p.id + ')"') + ' ' +
+            'class="w-full py-2.5 text-sm font-medium rounded-lg ' + (p.stock === 0 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm') + '">' +
+            (p.stock === 0 ? '已售罄' : '立即购买') + '</button>' +
+        '</div>';
+    }).join('');
+}
+
+function openBuy(id) {
+    current = products.filter(function (p) { return p.id == id; })[0];
+    if (!current) return;
+    currentCycle = 'monthly';
+    document.getElementById('buyTitle').textContent = '购买 ' + current.name;
+    document.querySelector('input[name="payType"][value="alipay"]').checked = true;
+    document.getElementById('buyBalanceHint').textContent = myBalance.toFixed(2);
+    document.getElementById('buySpec').innerHTML = [
+        current.cpu ? '<div>· CPU：' + current.cpu + ' 核</div>' : '',
+        current.memory ? '<div>· 内存：' + (current.memory / 1024).toFixed(current.memory % 1024 ? 1 : 0) + ' GB</div>' : '',
+        current.disk ? '<div>· 磁盘：' + current.disk + ' GB</div>' : '',
+        current.bandwidth ? '<div>· 带宽：' + current.bandwidth + ' Mbps</div>' : '',
+        current.traffic_limit ? '<div>· 流量：' + current.traffic_limit + ' GB</div>' : '',
+        current.image ? '<div>· 系统：' + esc(current.image) + '</div>' : ''
+    ].filter(Boolean).join('');
+    var group = document.getElementById('cycleGroup');
+    group.innerHTML = cycles.map(function (c) {
+        var price = priceOf(current, c.key);
+        var disabled = price <= 0;
+        return '<button data-cycle="' + c.key + '" ' + (disabled ? 'disabled' : '') + ' ' +
+            'class="px-3 py-2 text-sm rounded-lg border text-left ' + (disabled ? 'opacity-40 cursor-not-allowed border-gray-200 bg-gray-50' : 'border-gray-200 hover:border-blue-400') + '">' +
+            '<div class="font-medium text-gray-800">' + c.label + '</div>' +
+            '<div class="text-xs ' + (disabled ? 'text-gray-400' : 'text-blue-600 font-semibold') + '">' + (disabled ? '不可购' : '¥ ' + Number(price).toFixed(2) + c.suffix) + '</div>' +
+            '</button>';
+    }).join('');
+    group.querySelectorAll('button[data-cycle]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            currentCycle = b.dataset.cycle;
+            group.querySelectorAll('button[data-cycle]').forEach(function (x) { x.classList.remove('bg-blue-50'); x.classList.add('border-gray-200'); });
+            b.classList.remove('border-gray-200'); b.classList.add('bg-blue-50', 'border-blue-400');
+            updateTotal();
+        });
+    });
+    group.querySelector('[data-cycle="' + currentCycle + '"]').classList.add('bg-blue-50', 'border-blue-400');
+    document.getElementById('buyTotal').textContent = Number(priceOf(current, currentCycle)).toFixed(2);
+    showEl('buyModal');
+}
+
+function updateTotal() {
+    document.getElementById('buyTotal').textContent = Number(priceOf(current, currentCycle)).toFixed(2);
+}
+
+function doBuy() {
+    if (!payEnabled && !isBalancePay()) { alert('支付功能未开启，无法下单'); return; }
+    var btn = document.getElementById('buyBtn');
+    btn.disabled = true; btn.textContent = '下单中…';
+    $.ajax({
+        url: API + '/orders', type: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ product_id: current.id, billing_cycle: currentCycle, quantity: 1, pay_type: currentPayType() }),
+        success: function (r) {
+            if (r.code === 200 && r.data && r.data.order) {
+                closeBuy();
+                if (isBalancePay()) {
+                    payWithBalance(r.data.order);
+                } else if (r.data.pay_url) {
+                    showPay(r.data.order, r.data.pay_url);
+                } else {
+                    alert('下单成功，请前往订单页完成支付');
+                }
+            } else {
+                alert((r.msg || '下单失败'));
+                btn.disabled = false; btn.textContent = '立即购买';
+            }
+        },
+        error: function () { btn.disabled = false; btn.textContent = '立即购买'; alert('网络错误，请稍后重试'); }
+    });
+}
+
+function currentPayType() {
+    var el = document.querySelector('input[name="payType"]:checked');
+    return el && el.value === 'balance' ? 'balance' : 'alipay';
+}
+function isBalancePay() {
+    return currentPayType() === 'balance';
+}
+
+function payWithBalance(order) {
+    var price = priceOf(current, currentCycle);
+    if (myBalance < price) {
+        alert('余额不足：需 ¥' + price.toFixed(2) + '，当前余额 ¥' + myBalance.toFixed(2) + '。请先充值或改用第三方支付。');
+        loadAccount();
+        return;
+    }
+    $.ajax({
+        url: API + '/orders/pay-with-balance', type: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ order_no: order.order_no }),
+        success: function (r) {
+            if (r.code === 200) {
+                showEl('payModal');
+                document.getElementById('payIcon').setAttribute('data-icon', 'mdi:check-circle');
+                document.getElementById('payTitle').textContent = '支付成功';
+                document.getElementById('payDesc').textContent = '已用余额完成支付，系统正在为你开通容器…';
+                document.getElementById('payOpenBtn').classList.add('hidden');
+                setTimeout(function () { loadAccount(); window.location.href = '/user/orders'; }, 1500);
+            } else {
+                alert(r.msg || '余额支付失败');
+                loadAccount();
+            }
+        },
+        error: function () { alert('网络错误，请稍后重试'); }
+    });
+}
+
+function showPay(order, payUrl) {
+    document.getElementById('payIcon').setAttribute('data-icon', 'mdi:qrcode-scan');
+    document.getElementById('payTitle').textContent = '订单 ' + order.order_no;
+    document.getElementById('payDesc').textContent = '请在新窗口完成支付（' + Number(order.amount).toFixed(2) + ' 元）。支付成功后系统将自动开通。';
+    var openBtn = document.getElementById('payOpenBtn');
+    openBtn.classList.remove('hidden');
+    openBtn.textContent = '打开支付窗口';
+    openBtn.onclick = function () { window.open(payUrl, '_blank'); };
+    showEl('payModal');
+}
+
+function closeBuy() { hideEl('buyModal'); }
+function closePay() { hideEl('payModal'); window.location.href = API.replace('/api/user', '/user') + '/orders'; }
+function showEl(id) { var e = document.getElementById(id); e.classList.remove('hidden'); e.classList.add('flex'); }
+function hideEl(id) { var e = document.getElementById(id); e.classList.add('hidden'); e.classList.remove('flex'); }
+
+document.querySelectorAll('.pay-tab').forEach(function (b) {
+    b.addEventListener('click', function () {
+        document.querySelectorAll('.pay-tab').forEach(function (x) { x.classList.remove('active'); });
+        b.classList.add('active');
+        renderProducts(b.dataset.cat);
+    });
+});
+
+loadProducts();
+</script>
+{{template "user/user_footer.html" .}}
+</body>
+</html>

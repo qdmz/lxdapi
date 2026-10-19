@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <link href="/static/css/daisyui.min.css" rel="stylesheet">
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    {{else}}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {{end}}
+</head>
+<body class="min-h-screen flex flex-col" style="background-color:#f9fafb">
+{{template "admin/admin_header.html" .}}
+<div class="flex-1" style="background-color: #f9fafb;">
+<div class="max-w-5xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
+        <div>
+            <h1 class="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+                <span class="iconify" data-icon="mdi:message-outline" data-width="20"></span>站内消息
+            </h1>
+            <p class="text-xs sm:text-sm text-gray-500 mt-1">查看系统向用户发送的通知与广播记录。</p>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 mb-4">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+            <select id="filterType" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px]">
+                <option value="">全部类型</option>
+                <option value="system">系统</option>
+                <option value="ticket">工单</option>
+                <option value="order">订单</option>
+                <option value="promotion">公告</option>
+            </select>
+            <button onclick="loadNotifs(1)" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">查询</button>
+        </div>
+    </div>
+
+    <div id="notifList" class="space-y-3"></div>
+
+    <div class="flex items-center justify-between mt-4">
+        <div id="pagerInfo" class="text-xs text-gray-500"></div>
+        <div class="flex items-center gap-2">
+            <button id="prevBtn" onclick="changePage(-1)" class="px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-40">上一页</button>
+            <span id="pagerText" class="text-sm text-gray-600">1 / 1</span>
+            <button id="nextBtn" onclick="changePage(1)" class="px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-40">下一页</button>
+        </div>
+    </div>
+</div>
+
+<script>
+var API = '/api/admin';
+var currentPage = 1;
+var pageSize = 20;
+var totalPage = 1;
+
+function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+function fmtTime(s) {
+    if (!s) return '-';
+    return String(s).replace('T', ' ').substring(0, 19);
+}
+function typeBadge(t) {
+    var map = { system: '系统', ticket: '工单', order: '订单', promotion: '公告' };
+    var cls = { system: 'bg-gray-100 text-gray-600', ticket: 'bg-amber-100 text-amber-700', order: 'bg-blue-100 text-blue-700', promotion: 'bg-green-100 text-green-700' };
+    return '<span class="px-2 py-0.5 rounded-full text-xs ' + (cls[t] || cls.system) + '">' + (map[t] || t || '系统') + '</span>';
+}
+
+function loadNotifs(page) {
+    currentPage = page || 1;
+    var type = document.getElementById('filterType').value;
+    var url = API + '/notifications?page=' + currentPage + '&page_size=' + pageSize;
+    if (type) url += '&type=' + encodeURIComponent(type);
+    $.get(url, function (r) {
+        if (r.code !== 200) { alert(r.msg || '加载失败'); return; }
+        var d = r.data || {};
+        totalPage = Math.max(1, Math.ceil((d.total || 0) / pageSize));
+        renderList(d.list || []);
+        document.getElementById('pagerText').textContent = currentPage + ' / ' + totalPage;
+        document.getElementById('pagerInfo').textContent = '共 ' + (d.total || 0) + ' 条通知';
+        document.getElementById('prevBtn').disabled = currentPage <= 1;
+        document.getElementById('nextBtn').disabled = currentPage >= totalPage;
+    });
+}
+function changePage(delta) { loadNotifs(currentPage + delta); }
+
+function renderList(list) {
+    var el = document.getElementById('notifList');
+    if (!list.length) {
+        el.innerHTML = '<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-400 text-sm">暂无通知</div>';
+        return;
+    }
+    el.innerHTML = list.map(function (n) {
+        return '<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">' +
+            '<div class="flex items-center justify-between gap-3 mb-2">' +
+            '<span class="font-medium text-gray-800">' + esc(n.title) + '</span>' +
+            '<div class="flex items-center gap-2">' + typeBadge(n.type) +
+            '<span class="text-xs text-gray-400">' + fmtTime(n.created_at) + '</span></div></div>' +
+            '<p class="text-sm text-gray-600 whitespace-pre-wrap mb-2">' + esc(n.content) + '</p>' +
+            '<div class="text-xs text-gray-400">用户ID: ' + n.user_id + (n.is_read ? ' · 已读' : ' · 未读') + '</div>' +
+            '</div>';
+    }).join('');
+}
+
+loadNotifs(1);
+</script>
+</div>
+</div>
+{{template "admin/admin_footer.html" .}}
+</body>
+</html>

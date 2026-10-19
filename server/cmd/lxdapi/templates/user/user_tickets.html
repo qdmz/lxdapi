@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <link href="/static/css/daisyui.min.css" rel="stylesheet">
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    {{else}}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {{end}}
+</head>
+<body class="min-h-screen flex flex-col" style="background-color:#f9fafb">
+{{template "user/user_header.html" .}}
+<div class="flex-1" style="background-color: #f9fafb;">
+<div class="max-w-5xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
+        <div>
+            <h1 class="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+                <span class="iconify" data-icon="mdi:ticket-outline" data-width="20"></span>工单中心
+            </h1>
+            <p class="text-xs sm:text-sm text-gray-500 mt-1">提交问题或查看处理进度</p>
+        </div>
+        <button onclick="openTicketModal()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition shadow-sm flex items-center gap-2">
+            <span class="iconify" data-icon="mdi:plus-circle-outline" data-width="18"></span>提交工单
+        </button>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead>
+                <tr class="bg-gray-50 text-gray-600">
+                    <th class="px-4 py-3 text-left font-medium">ID</th>
+                    <th class="px-4 py-3 text-left font-medium">标题</th>
+                    <th class="px-4 py-3 text-left font-medium">类型</th>
+                    <th class="px-4 py-3 text-left font-medium">优先级</th>
+                    <th class="px-4 py-3 text-left font-medium">状态</th>
+                    <th class="px-4 py-3 text-left font-medium">创建时间</th>
+                    <th class="px-4 py-3 text-right font-medium">操作</th>
+                </tr>
+            </thead>
+            <tbody id="ticketTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 新建工单模态 -->
+<div id="ticketModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 class="text-base font-semibold text-gray-800">提交工单</h3>
+            <button onclick="closeTicketModal()" class="text-gray-400 hover:text-gray-600"><span class="iconify" data-icon="mdi:close" data-width="20"></span></button>
+        </div>
+        <div class="px-5 py-4 space-y-3">
+            <div>
+                <div class="text-xs text-gray-600 mb-1">标题 *</div>
+                <input id="tkTitle" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="简要描述问题">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <div class="text-xs text-gray-600 mb-1">类型</div>
+                    <select id="tkType" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="technical">技术问题</option>
+                        <option value="billing">计费/账务</option>
+                        <option value="other">其他</option>
+                    </select>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-600 mb-1">优先级</div>
+                    <select id="tkPriority" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="low">低</option>
+                        <option value="normal" selected>普通</option>
+                        <option value="high">高</option>
+                        <option value="urgent">紧急</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">详细内容 *</div>
+                <textarea id="tkContent" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="请描述遇到的问题、操作步骤和期望结果"></textarea>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="closeTicketModal()" class="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition">取消</button>
+                <button type="button" onclick="submitTicket()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">提交</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var API = '/api/user';
+function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+function fmtTime(s) {
+    if (!s) return '-';
+    return String(s).replace('T', ' ').substring(0, 19);
+}
+function statusBadge(s) {
+    var map = { open: ['待处理', 'bg-amber-100 text-amber-700'], pending: ['待确认', 'bg-blue-100 text-blue-700'], closed: ['已关闭', 'bg-gray-200 text-gray-600'] };
+    var m = map[s] || [s, 'bg-gray-100 text-gray-600'];
+    return '<span class="px-2 py-0.5 rounded-full text-xs ' + m[1] + '">' + m[0] + '</span>';
+}
+function typeLabel(t) {
+    var map = { billing: '计费', technical: '技术', other: '其他' };
+    return esc(map[t] || t || '其他');
+}
+function priorityLabel(p) {
+    var map = { low: '低', normal: '普通', high: '高', urgent: '紧急' };
+    return esc(map[p] || p || '普通');
+}
+
+function loadTickets() {
+    $.get(API + '/tickets', function (r) {
+        if (r.code !== 200) { alert(r.msg || '加载失败'); return; }
+        renderTickets(r.data || []);
+    });
+}
+
+function renderTickets(list) {
+    var tbody = document.getElementById('ticketTable');
+    if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">暂无工单，点击「提交工单」创建</td></tr>';
+        return;
+    }
+    tbody.innerHTML = list.map(function (t) {
+        var acts = '<a class="text-blue-600 hover:underline text-sm mr-2" href="/user/tickets/' + t.id + '">详情</a>';
+        if (t.status !== 'closed') {
+            acts += '<button class="text-gray-500 hover:underline text-sm" onclick="closeTicket(' + t.id + ')">关闭</button>';
+        }
+        return '<tr class="border-t border-gray-100 hover:bg-gray-50">' +
+            '<td class="px-4 py-3 text-gray-500">' + t.id + '</td>' +
+            '<td class="px-4 py-3 font-medium text-gray-800">' + esc(t.title) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + typeLabel(t.type) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + priorityLabel(t.priority) + '</td>' +
+            '<td class="px-4 py-3">' + statusBadge(t.status) + '</td>' +
+            '<td class="px-4 py-3 text-gray-500 text-xs">' + fmtTime(t.created_at) + '</td>' +
+            '<td class="px-4 py-3 text-right whitespace-nowrap">' + acts + '</td>' +
+        '</tr>';
+    }).join('');
+}
+
+function openTicketModal() {
+    var m = document.getElementById('ticketModal');
+    m.classList.remove('hidden'); m.classList.add('flex');
+}
+function closeTicketModal() {
+    var m = document.getElementById('ticketModal');
+    m.classList.add('hidden'); m.classList.remove('flex');
+}
+function submitTicket() {
+    var title = document.getElementById('tkTitle').value.trim();
+    var content = document.getElementById('tkContent').value.trim();
+    if (!title || !content) { alert('请填写标题和内容'); return; }
+    $.ajax({
+        url: API + '/tickets', type: 'POST', contentType: 'application/json',
+        data: JSON.stringify({
+            title: title,
+            content: content,
+            type: document.getElementById('tkType').value,
+            priority: document.getElementById('tkPriority').value
+        }),
+        success: function (r) {
+            if (r.code === 200) {
+                alert('工单已提交');
+                closeTicketModal();
+                document.getElementById('tkTitle').value = '';
+                document.getElementById('tkContent').value = '';
+                loadTickets();
+            } else alert(r.msg || '提交失败');
+        },
+        error: function () { alert('请求失败'); }
+    });
+}
+function closeTicket(id) {
+    if (!confirm('确定关闭该工单？')) return;
+    $.ajax({
+        url: API + '/tickets/' + id + '/close', type: 'POST',
+        success: function (r) {
+            if (r.code === 200) { alert('已关闭'); loadTickets(); }
+            else alert(r.msg || '操作失败');
+        },
+        error: function () { alert('请求失败'); }
+    });
+}
+
+loadTickets();
+</script>
+</div>
+</div>
+{{template "user/user_footer.html" .}}
+</body>
+</html>

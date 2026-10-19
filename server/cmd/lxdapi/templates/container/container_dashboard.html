@@ -106,6 +106,7 @@
                 <button onclick="stopContainer()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded transition whitespace-nowrap">停止</button>
                 <button onclick="restartContainer()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition whitespace-nowrap">重启</button>
                 <button onclick="openConsole()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 rounded transition whitespace-nowrap">VNC控制台</button>
+                <button onclick="openSFTP()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded transition whitespace-nowrap">SFTP文件</button>
                 <button onclick="showResetPasswordModal()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded transition whitespace-nowrap">重置密码</button>
                 <button onclick="showReinstallModal()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded transition whitespace-nowrap">重装系统</button>
                 <button onclick="showDNSModal()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded transition whitespace-nowrap">DNS设置</button>
@@ -1070,6 +1071,33 @@
                 error: function(xhr) {
                     handleAuthError(xhr);
                     showToast('error', '打开控制台失败');
+                }
+            });
+        }
+
+        function openSFTP() {
+            if (!containerName) {
+                showToast('error', '容器名称未加载，请稍后重试');
+                return;
+            }
+
+            $.ajax({
+                url: '/api/container/console/sftp-token',
+                type: 'POST',
+                headers: headers,
+                contentType: 'application/json',
+                data: JSON.stringify({ hostname: containerName }),
+                success: function(result) {
+                    if (result.code === 200 && result.data.token) {
+                        const sftpUrl = `/console/sftp?token=${result.data.token}`;
+                        window.open(sftpUrl, '_blank', 'width=1200,height=800');
+                    } else {
+                        showToast('error', '创建SFTP令牌失败: ' + (result.msg || result.message));
+                    }
+                },
+                error: function(xhr) {
+                    handleAuthError(xhr);
+                    showToast('error', '打开SFTP文件管理器失败');
                 }
             });
         }

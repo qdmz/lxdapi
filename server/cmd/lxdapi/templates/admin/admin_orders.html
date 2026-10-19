@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <link href="/static/css/daisyui.min.css" rel="stylesheet">
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    {{else}}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {{end}}
+</head>
+<body class="min-h-screen flex flex-col" style="background-color:#f9fafb">
+{{template "admin/admin_header.html" .}}
+<div class="flex-1" style="background-color: #f9fafb;">
+<div class="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
+        <div>
+            <h1 class="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+                <span class="iconify" data-icon="mdi:receipt-text-outline" data-width="20"></span>订单管理
+            </h1>
+            <p class="text-xs sm:text-sm text-gray-500 mt-1">查看所有订单，支持手动标记支付、重试开通与关闭订单。</p>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 mb-4">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+            <select id="filterStatus" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px]">
+                <option value="">全部状态</option>
+                <option value="pending">待支付</option>
+                <option value="paid">已支付</option>
+                <option value="provisioning">开通中</option>
+                <option value="active">已开通</option>
+                <option value="failed">开通失败</option>
+                <option value="cancelled">已关闭</option>
+            </select>
+            <input id="filterKw" class="px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[160px]" placeholder="搜索订单号 / 用户 / 产品">
+            <button onclick="loadOrders(1)" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">查询</button>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead>
+                <tr class="bg-gray-50 text-gray-600">
+                    <th class="px-4 py-3 text-left font-medium">订单号</th>
+                    <th class="px-4 py-3 text-left font-medium">用户</th>
+                    <th class="px-4 py-3 text-left font-medium">产品 / 节点</th>
+                    <th class="px-4 py-3 text-left font-medium">规格</th>
+                    <th class="px-4 py-3 text-left font-medium">金额</th>
+                    <th class="px-4 py-3 text-left font-medium">状态</th>
+                    <th class="px-4 py-3 text-left font-medium">下单时间</th>
+                    <th class="px-4 py-3 text-right font-medium">操作</th>
+                </tr>
+            </thead>
+            <tbody id="orderTable"></tbody>
+        </table>
+    </div>
+
+    <div class="flex items-center justify-between mt-4">
+        <div id="pagerInfo" class="text-xs text-gray-500"></div>
+        <div class="flex items-center gap-2">
+            <button id="prevBtn" onclick="changePage(-1)" class="px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-40">上一页</button>
+            <span id="pagerText" class="text-sm text-gray-600">1 / 1</span>
+            <button id="nextBtn" onclick="changePage(1)" class="px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-40">下一页</button>
+        </div>
+    </div>
+
+    <!-- 订单详情模态 -->
+    <div id="detailModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h3 class="text-base font-semibold text-gray-800">订单详情</h3>
+                <button onclick="closeDetail()" class="text-gray-400 hover:text-gray-600">
+                    <span class="iconify" data-icon="mdi:close" data-width="20"></span>
+                </button>
+            </div>
+            <div id="detailBody" class="px-5 py-4"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+var API = '/api/admin';
+var currentPage = 1;
+var pageSize = 20;
+var totalPage = 1;
+
+function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+
+function fmtTime(s) {
+    if (!s) return '-';
+    return String(s).replace('T', ' ').substring(0, 19);
+}
+
+function statusBadge(s) {
+    var map = {
+        pending: ['待支付', 'bg-amber-100 text-amber-700'],
+        paid: ['已支付', 'bg-blue-100 text-blue-700'],
+        provisioning: ['开通中', 'bg-indigo-100 text-indigo-700'],
+        active: ['已开通', 'bg-green-100 text-green-700'],
+        failed: ['开通失败', 'bg-red-100 text-red-700'],
+        cancelled: ['已关闭', 'bg-gray-200 text-gray-600']
+    };
+    var m = map[s] || [s, 'bg-gray-100 text-gray-600'];
+    return '<span class="px-2 py-0.5 rounded-full text-xs ' + m[1] + '">' + m[0] + '</span>';
+}
+
+function loadOrders(page) {
+    currentPage = page || 1;
+    var status = document.getElementById('filterStatus').value;
+    var kw = document.getElementById('filterKw').value.trim();
+    var url = API + '/orders?page=' + currentPage + '&page_size=' + pageSize;
+    if (status) url += '&status=' + encodeURIComponent(status);
+    if (kw) url += '&keyword=' + encodeURIComponent(kw);
+
+    $.get(url, function (r) {
+        if (r.code !== 200) { alert(r.msg || '加载失败'); return; }
+        var d = r.data || {};
+        totalPage = Math.max(1, Math.ceil((d.total || 0) / pageSize));
+        renderOrders(d.list || []);
+        document.getElementById('pagerText').textContent = currentPage + ' / ' + totalPage;
+        document.getElementById('pagerInfo').textContent = '共 ' + (d.total || 0) + ' 条订单';
+        document.getElementById('prevBtn').disabled = currentPage <= 1;
+        document.getElementById('nextBtn').disabled = currentPage >= totalPage;
+    });
+}
+
+function changePage(delta) {
+    loadOrders(currentPage + delta);
+}
+
+function renderOrders(list) {
+    var tbody = document.getElementById('orderTable');
+    if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-400">暂无订单</td></tr>';
+        return;
+    }
+    tbody.innerHTML = list.map(function (o) {
+        var spec = o.cpu + 'C / ' + o.memory + 'M / ' + o.disk + 'G';
+        var node = o.node_name || '-';
+        var acts = [];
+        if (o.status === 'pending') {
+            acts.push('<button class="text-green-600 hover:underline text-sm mr-2" onclick="markPaid(' + o.id + ')">标记支付</button>');
+        }
+        if (o.status === 'failed' || o.status === 'paid') {
+            acts.push('<button class="text-blue-600 hover:underline text-sm mr-2" onclick="retry(' + o.id + ')">重新开通</button>');
+        }
+        if (o.status === 'pending') {
+            acts.push('<button class="text-gray-500 hover:underline text-sm mr-2" onclick="closeOrder(' + o.id + ')">关闭</button>');
+        }
+        return '<tr class="border-t border-gray-100 hover:bg-gray-50">' +
+            '<td class="px-4 py-3 font-mono text-xs text-gray-700">' + esc(o.order_no) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + esc(o.username) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + esc(o.product_name) + ' <span class="text-gray-400">·</span> ' + esc(node) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + esc(spec) + ' × ' + o.quantity + '</td>' +
+            '<td class="px-4 py-3 font-medium text-gray-800">¥ ' + Number(o.amount || 0).toFixed(2) + '</td>' +
+            '<td class="px-4 py-3">' + statusBadge(o.status) + '</td>' +
+            '<td class="px-4 py-3 text-gray-500 text-xs">' + fmtTime(o.created_at) + '</td>' +
+            '<td class="px-4 py-3 text-right whitespace-nowrap">' +
+                '<button class="text-gray-600 hover:underline text-sm mr-2" onclick="detail(' + o.id + ')">详情</button>' +
+                acts.join('') +
+            '</td>' +
+        '</tr>';
+    }).join('');
+}
+
+function detail(id) {
+    $.get(API + '/orders/' + id, function (r) {
+        if (r.code !== 200) { alert(r.msg || '加载失败'); return; }
+        var o = r.data;
+        document.getElementById('detailBody').innerHTML =
+            '<div class="space-y-2 text-sm">' +
+            row('订单号', esc(o.order_no), 'font-mono') +
+            row('用户', esc(o.username)) +
+            row('产品', esc(o.product_name)) +
+            row('节点', esc(o.node_name || '-')) +
+            row('镜像', esc(o.image || '-')) +
+            row('规格', o.cpu + ' 核 / ' + o.memory + ' MB / ' + o.disk + ' GB / 流量 ' + o.traffic_limit + ' GB') +
+            row('计费周期', esc(o.billing_cycle)) +
+            row('数量', o.quantity) +
+            row('金额', '¥ ' + Number(o.amount || 0).toFixed(2)) +
+            row('支付类型', esc(o.pay_type || '-')) +
+            row('交易流水', esc(o.trade_no || '-')) +
+            row('状态', statusBadge(o.status)) +
+            row('开通容器', esc(o.container_name || '-')) +
+            row('开通状态', esc(o.provision_status || '-')) +
+            (o.provision_error ? row('开通失败原因', esc(o.provision_error)) : '') +
+            row('支付时间', fmtTime(o.paid_at)) +
+            row('到期时间', fmtTime(o.expire_at)) +
+            row('下单时间', fmtTime(o.created_at)) +
+            '</div>';
+        showDetail();
+    });
+}
+
+function row(k, v, extra) {
+    return '<div class="flex items-start justify-between gap-4">' +
+        '<span class="text-gray-500 shrink-0">' + k + '</span>' +
+        '<span class="text-gray-800 text-right ' + (extra || '') + '">' + v + '</span></div>';
+}
+
+function showDetail() {
+    var m = document.getElementById('detailModal');
+    m.classList.remove('hidden'); m.classList.add('flex');
+}
+function closeDetail() {
+    var m = document.getElementById('detailModal');
+    m.classList.add('hidden'); m.classList.remove('flex');
+}
+
+function act(id, action, confirmMsg) {
+    if (confirmMsg && !confirm(confirmMsg)) return;
+    $.ajax({ url: API + '/orders/' + id + '/' + action, type: 'POST',
+        success: function (r) { if (r.code === 200) { alert('操作成功'); loadOrders(currentPage); } else alert(r.msg || '操作失败'); },
+        error: function () { alert('请求失败'); } });
+}
+function markPaid(id) { act(id, 'mark-paid', '标记该订单为已支付并立即开通？'); }
+function retry(id) { act(id, 'provision', '重新提交自动开通任务？'); }
+function closeOrder(id) { act(id, 'close', '关闭该订单？'); }
+
+loadOrders(1);
+</script>
+</div>
+</div>
+{{template "admin/admin_footer.html" .}}
+</body>
+</html>

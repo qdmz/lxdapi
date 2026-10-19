@@ -100,6 +100,22 @@
                             <span class="iconify" data-icon="mdi:package-variant-closed" data-width="18"></span>
                             产品管理
                         </a></li>
+                        <li><a href="/admin/orders" class="text-sm flex items-center gap-2">
+                            <span class="iconify" data-icon="mdi:receipt-text-outline" data-width="18"></span>
+                            订单管理
+                        </a></li>
+                        <li><a href="/admin/nodes" class="text-sm flex items-center gap-2">
+                            <span class="iconify" data-icon="mdi:server-network" data-width="18"></span>
+                            节点管理
+                        </a></li>
+                        <li><a href="/admin/tickets" class="text-sm flex items-center gap-2">
+                            <span class="iconify" data-icon="mdi:ticket-outline" data-width="18"></span>
+                            工单管理
+                        </a></li>
+                        <li><a href="/admin/messages" class="text-sm flex items-center gap-2">
+                            <span class="iconify" data-icon="mdi:message-outline" data-width="18"></span>
+                            站内消息
+                        </a></li>
                     </ul>
                 </div>
                 <a href="/admin/users" class="text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-3 py-2 rounded-lg text-sm font-medium smooth-transition">
@@ -114,13 +130,29 @@
                         任务管理
                     </div>
                 </a>
-                <a href="/admin/brand-settings" class="text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-3 py-2 rounded-lg text-sm font-medium smooth-transition">
-                <a href="/admin/smtp" class="text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-3 py-2 rounded-lg text-sm font-medium smooth-transition">
-                    <div class="flex items-center gap-2">
-                        <span class="iconify" data-icon="mdi:email-outline" data-width="18"></span>
-                        邮件服务
+                <div class="dropdown">
+                    <div tabindex="0" class="text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-3 py-2 rounded-lg text-sm font-medium smooth-transition cursor-pointer">
+                        <div class="flex items-center gap-2">
+                            <span class="iconify" data-icon="mdi:cog-outline" data-width="18"></span>
+                            系统设置
+                            <span class="iconify" data-icon="mdi:chevron-down" data-width="12"></span>
+                        </div>
                     </div>
-                </a>
+                    <ul tabindex="0" class="dropdown-content menu bg-white rounded-lg shadow-lg border border-gray-200 w-48 mt-2 p-1 z-50">
+                        <li><a href="/admin/brand-settings" class="text-sm flex items-center gap-2">
+                            <span class="iconify" data-icon="mdi:palette-outline" data-width="18"></span>
+                            品牌设置
+                        </a></li>
+                        <li><a href="/admin/smtp" class="text-sm flex items-center gap-2">
+                            <span class="iconify" data-icon="mdi:email-outline" data-width="18"></span>
+                            邮件服务
+                        </a></li>
+                        <li><a href="/admin/payment" class="text-sm flex items-center gap-2">
+                            <span class="iconify" data-icon="mdi:credit-card-outline" data-width="18"></span>
+                            易支付配置
+                        </a></li>
+                    </ul>
+                </div>
                 <div class="dropdown">
                     <div tabindex="0" class="text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-3 py-2 rounded-lg text-sm font-medium smooth-transition cursor-pointer">
                         <div class="flex items-center gap-2">
@@ -223,11 +255,39 @@
                     <span class="iconify" data-icon="mdi:clipboard-list-outline" data-width="20"></span>
                     任务管理
                 </a>
-                <a href="/admin/brand-settings" class="flex items-center gap-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-4 py-3 rounded-lg text-sm font-medium smooth-transition">
-                <a href="/admin/smtp" class="flex items-center gap-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-4 py-3 rounded-lg text-sm font-medium smooth-transition">
-                    <span class="iconify" data-icon="mdi:email-outline" data-width="20"></span>
-                    邮件服务
+                <a href="/admin/tickets" class="flex items-center gap-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-4 py-3 rounded-lg text-sm font-medium smooth-transition">
+                    <span class="iconify" data-icon="mdi:ticket-outline" data-width="20"></span>
+                    工单管理
                 </a>
+                <a href="/admin/messages" class="flex items-center gap-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-4 py-3 rounded-lg text-sm font-medium smooth-transition">
+                    <span class="iconify" data-icon="mdi:message-outline" data-width="20"></span>
+                    站内消息
+                </a>
+                <div class="mobile-dropdown">
+                    <button onclick="toggleMobileDropdown(this)" class="flex items-center justify-between w-full gap-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-4 py-3 rounded-lg text-sm font-medium smooth-transition">
+                        <div class="flex items-center gap-3">
+                            <span class="iconify" data-icon="mdi:cog-outline" data-width="20"></span>
+                            系统设置
+                        </div>
+                        <span class="iconify chevron-icon smooth-transition" data-icon="mdi:chevron-down" data-width="18"></span>
+                    </button>
+                    <div class="mobile-dropdown-content" style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease;">
+                        <div class="pl-4 space-y-1 py-2">
+                            <a href="/admin/brand-settings" class="flex items-center gap-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg text-sm smooth-transition">
+                                <span class="iconify" data-icon="mdi:palette-outline" data-width="20"></span>
+                                品牌设置
+                            </a>
+                            <a href="/admin/smtp" class="flex items-center gap-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg text-sm smooth-transition">
+                                <span class="iconify" data-icon="mdi:email-outline" data-width="20"></span>
+                                邮件服务
+                            </a>
+                            <a href="/admin/payment" class="flex items-center gap-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg text-sm smooth-transition">
+                                <span class="iconify" data-icon="mdi:credit-card-outline" data-width="20"></span>
+                                易支付配置
+                            </a>
+                        </div>
+                    </div>
+                </div>
                 <div class="mobile-dropdown">
                     <button onclick="toggleMobileDropdown(this)" class="flex items-center justify-between w-full gap-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-4 py-3 rounded-lg text-sm font-medium smooth-transition">
                         <div class="flex items-center gap-3">

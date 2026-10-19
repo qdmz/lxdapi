@@ -51,6 +51,19 @@
         </div>
 
         <div class="content-box rounded-lg border border-gray-200 p-4 mb-4">
+            <h3 class="text-sm font-bold text-gray-800 mb-3">账户余额</h3>
+            <div class="flex flex-wrap items-center gap-4">
+                <div class="text-2xl font-bold text-emerald-600">¥ <span id="balanceVal">0.00</span></div>
+                <div class="flex items-center gap-2">
+                    <input type="number" id="balanceInput" min="0" max="1000000" step="0.01" value="100"
+                        class="w-32 px-3 py-1.5 border border-gray-300 rounded text-sm">
+                    <button onclick="adjustBalance()" class="px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded transition">调整余额</button>
+                </div>
+            </div>
+            <p class="text-xs text-gray-400 mt-2">调整后立即生效，可用于余额支付与自动续费。</p>
+        </div>
+
+        <div class="content-box rounded-lg border border-gray-200 p-4 mb-4">
             <h3 class="text-sm font-bold text-gray-800 mb-3">用户配额 (已用 / 限制)</h3>
             <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
                 <div><span class="text-gray-500">CPU:</span> <span class="font-medium" id="cpuUsed">0</span> / <span class="font-medium" id="cpuQuota">0</span></div>
@@ -215,6 +228,7 @@
                         $('#username').text(user.Username);
                         $('#apiKey').text(user.APIKey);
                         $('#userName').text(user.Username);
+                        $('#balanceVal').text((user.Balance || 0).toFixed(2));
                         
                         const statusBadge = user.Status === 'active' 
                             ? '<span class="px-2 py-0.5 text-xs font-medium text-green-700 bg-green-100 rounded-full">正常</span>'
@@ -432,6 +446,26 @@
         function closeApiKeyModal() {
             $('#apiKeyModal').addClass('hidden');
             loadUserInfo();
+        }
+
+        function adjustBalance() {
+            var amt = parseFloat(document.getElementById('balanceInput').value);
+            if (isNaN(amt) || amt < 0) { alert('请输入有效的余额金额（≥0）'); return; }
+            $.ajax({
+                url: '/api/admin/users/balance',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ user_id: Number(userId), balance: amt }),
+                success: function(result) {
+                    if (result.code === 200) {
+                        showToast('success', '余额已调整为 ¥' + amt.toFixed(2));
+                        loadUserInfo();
+                    } else {
+                        showToast('error', result.msg || '操作失败');
+                    }
+                },
+                error: function() { showToast('error', '网络错误'); }
+            });
         }
 
     </script>

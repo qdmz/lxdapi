@@ -92,6 +92,7 @@
                 <button onclick="suspendContainer()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-yellow-700 bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 rounded transition whitespace-nowrap">暂停</button>
                 <button onclick="unsuspendContainer()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded transition whitespace-nowrap">恢复</button>
                 <button onclick="openConsole()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 rounded transition whitespace-nowrap">VNC控制台</button>
+                <button onclick="openSFTP()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 rounded transition whitespace-nowrap">SFTP文件</button>
                 <button onclick="showResetPasswordModal()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded transition whitespace-nowrap">重置密码</button>
                 <button onclick="showReinstallModal()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded transition whitespace-nowrap">重装系统</button>
                 <button onclick="showUpdateConfigModal()" class="px-2 py-1 lg:py-1.5 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded transition whitespace-nowrap">更换配置</button>
@@ -1766,6 +1767,33 @@
                 },
                 error: function() {
                     showToast('error', '创建控制台令牌失败');
+                }
+            });
+        }
+
+        function openSFTP() {
+            if (!containerData || containerData.status !== 'Running') {
+                showToast('error', '容器未运行，无法打开文件管理器');
+                return;
+            }
+
+            $.ajax({
+                url: '/api/admin/console/sftp-token',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    hostname: containerName
+                }),
+                success: function(result) {
+                    if (result.code === 200 && result.data.token) {
+                        const sftpUrl = `/console/sftp?token=${result.data.token}`;
+                        window.open(sftpUrl, '_blank', 'width=1200,height=800');
+                    } else {
+                        showToast('error', result.msg || '打开文件管理器失败');
+                    }
+                },
+                error: function() {
+                    showToast('error', '创建SFTP令牌失败');
                 }
             });
         }

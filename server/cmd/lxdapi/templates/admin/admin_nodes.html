@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <link href="/static/css/daisyui.min.css" rel="stylesheet">
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    {{else}}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {{end}}
+</head>
+<body class="min-h-screen flex flex-col" style="background-color:#f9fafb">
+{{template "admin/admin_header.html" .}}
+<div class="flex-1" style="background-color: #f9fafb;">
+<div class="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
+        <div>
+            <h1 class="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+                <span class="iconify" data-icon="mdi:server-network" data-width="20"></span>节点管理
+            </h1>
+            <p class="text-xs sm:text-sm text-gray-500 mt-1">节点代表一个机房 / 宿主机，产品可绑定节点，下单开通时按节点默认参数创建容器。</p>
+        </div>
+        <button onclick="openNodeModal()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition shadow-sm flex items-center gap-2">
+            <span class="iconify" data-icon="mdi:plus-circle-outline" data-width="18"></span>新建节点
+        </button>
+    </div>
+
+    <div id="alertBox" class="hidden mb-4 text-sm rounded-lg px-3 py-2"></div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead>
+                <tr class="bg-gray-50 text-gray-600">
+                    <th class="px-4 py-3 text-left font-medium">ID</th>
+                    <th class="px-4 py-3 text-left font-medium">名称</th>
+                    <th class="px-4 py-3 text-left font-medium">地区</th>
+                    <th class="px-4 py-3 text-left font-medium">地址</th>
+                    <th class="px-4 py-3 text-left font-medium">默认镜像</th>
+                    <th class="px-4 py-3 text-left font-medium">状态</th>
+                    <th class="px-4 py-3 text-left font-medium">排序</th>
+                    <th class="px-4 py-3 text-right font-medium">操作</th>
+                </tr>
+            </thead>
+            <tbody id="nodeTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 节点编辑模态 -->
+<div id="nodeModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 class="text-base font-semibold text-gray-800" id="nodeModalTitle">新建节点</h3>
+            <button onclick="closeNodeModal()" class="text-gray-400 hover:text-gray-600">
+                <span class="iconify" data-icon="mdi:close" data-width="20"></span>
+            </button>
+        </div>
+        <form id="nodeForm" class="px-5 py-4 space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <div class="text-xs text-gray-600 mb-1">节点名称 *</div>
+                    <input id="nodeName" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="node-01">
+                </div>
+                <div>
+                    <div class="text-xs text-gray-600 mb-1">地区 / 机房</div>
+                    <input id="nodeRegion" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="深圳">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <div class="text-xs text-gray-600 mb-1">节点地址（IP / 域名）</div>
+                    <input id="nodeHost" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="1.2.3.4">
+                </div>
+                <div>
+                    <div class="text-xs text-gray-600 mb-1">API 端口（预留）</div>
+                    <input id="nodeAPIPort" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">默认镜像</div>
+                <input id="nodeImage" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="debian-12-net">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <div class="text-xs text-gray-600 mb-1">默认存储池</div>
+                    <input id="nodeStoragePool" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="default">
+                </div>
+                <div>
+                    <div class="text-xs text-gray-600 mb-1">默认网桥</div>
+                    <input id="nodeNetwork" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="lxdbr0">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <div class="text-xs text-gray-600 mb-1">状态</div>
+                    <select id="nodeStatus" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="online">在线</option>
+                        <option value="maintenance">维护中</option>
+                        <option value="offline">离线</option>
+                    </select>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-600 mb-1">排序</div>
+                    <input id="nodeSort" type="number" value="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">备注</div>
+                <input id="nodeRemark" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="closeNodeModal()" class="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition">取消</button>
+                <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+var API = '/api/admin';
+var editingNode = null;
+
+function showAlert(type, msg) {
+    var el = document.getElementById('alertBox');
+    el.className = 'mb-4 text-sm rounded-lg px-3 py-2 ' + (type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700');
+    el.textContent = msg;
+    setTimeout(function () { el.className = 'hidden mb-4 text-sm rounded-lg px-3 py-2'; }, 3000);
+}
+
+function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+
+function statusBadge(s) {
+    var map = { online: '在线', maintenance: '维护中', offline: '离线' };
+    var cls = { online: 'bg-green-100 text-green-700', maintenance: 'bg-amber-100 text-amber-700', offline: 'bg-gray-200 text-gray-600' };
+    return '<span class="px-2 py-0.5 rounded-full text-xs ' + (cls[s] || cls.offline) + '">' + (map[s] || s) + '</span>';
+}
+
+function loadNodes() {
+    $.get(API + '/nodes', function (r) {
+        if (r.code !== 200) { showAlert('error', r.msg || '加载失败'); return; }
+        renderNodes(r.data || []);
+    });
+}
+
+function renderNodes(nodes) {
+    var tbody = document.getElementById('nodeTable');
+    if (!nodes.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-400">暂无节点</td></tr>';
+        return;
+    }
+    tbody.innerHTML = nodes.map(function (n) {
+        return '<tr class="border-t border-gray-100 hover:bg-gray-50">' +
+            '<td class="px-4 py-3 text-gray-500">' + n.id + '</td>' +
+            '<td class="px-4 py-3 font-medium text-gray-800">' + esc(n.name) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + esc(n.region || '-') + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + (esc(n.host || '-') + (n.api_port ? ':' + n.api_port : '')) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + esc(n.image || '-') + '</td>' +
+            '<td class="px-4 py-3">' + statusBadge(n.status || 'online') + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + n.sort + '</td>' +
+            '<td class="px-4 py-3 text-right whitespace-nowrap">' +
+                '<button onclick="editNode(' + n.id + ')" class="text-blue-600 hover:underline text-sm mr-3">编辑</button>' +
+                '<button onclick="delNode(' + n.id + ')" class="text-red-500 hover:underline text-sm">删除</button>' +
+            '</td>' +
+        '</tr>';
+    }).join('');
+}
+
+function openNodeModal() {
+    editingNode = null;
+    document.getElementById('nodeModalTitle').textContent = '新建节点';
+    document.getElementById('nodeForm').reset();
+    document.getElementById('nodeSort').value = '0';
+    showNodeModal();
+}
+
+function editNode(id) {
+    $.get(API + '/nodes/' + id, function (r) {
+        if (r.code !== 200) { showAlert('error', r.msg || '加载失败'); return; }
+        var n = r.data;
+        editingNode = n;
+        document.getElementById('nodeModalTitle').textContent = '编辑节点';
+        document.getElementById('nodeName').value = n.name || '';
+        document.getElementById('nodeRegion').value = n.region || '';
+        document.getElementById('nodeHost').value = n.host || '';
+        document.getElementById('nodeAPIPort').value = n.api_port || '';
+        document.getElementById('nodeImage').value = n.image || '';
+        document.getElementById('nodeStoragePool').value = n.storage_pool || '';
+        document.getElementById('nodeNetwork').value = n.network || '';
+        document.getElementById('nodeStatus').value = n.status || 'online';
+        document.getElementById('nodeSort').value = n.sort || 0;
+        document.getElementById('nodeRemark').value = n.remark || '';
+        showNodeModal();
+    });
+}
+
+function showNodeModal() {
+    var m = document.getElementById('nodeModal');
+    m.classList.remove('hidden');
+    m.classList.add('flex');
+}
+function closeNodeModal() {
+    var m = document.getElementById('nodeModal');
+    m.classList.add('hidden');
+    m.classList.remove('flex');
+}
+
+document.getElementById('nodeForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var data = {
+        name: document.getElementById('nodeName').value,
+        region: document.getElementById('nodeRegion').value,
+        host: document.getElementById('nodeHost').value,
+        api_port: parseInt(document.getElementById('nodeAPIPort').value || '0', 10),
+        image: document.getElementById('nodeImage').value,
+        storage_pool: document.getElementById('nodeStoragePool').value,
+        network: document.getElementById('nodeNetwork').value,
+        status: document.getElementById('nodeStatus').value,
+        sort: parseInt(document.getElementById('nodeSort').value || '0', 10),
+        remark: document.getElementById('nodeRemark').value
+    };
+    if (!data.name) { showAlert('error', '请填写节点名称'); return; }
+    if (editingNode) {
+        $.ajax({ url: API + '/nodes/' + editingNode.id, type: 'PUT', contentType: 'application/json', data: JSON.stringify(data),
+            success: function (r) { if (r.code === 200) { showAlert('success', '已保存'); closeNodeModal(); loadNodes(); } else showAlert('error', r.msg || '保存失败'); },
+            error: function () { showAlert('error', '请求失败'); } });
+    } else {
+        $.ajax({ url: API + '/nodes', type: 'POST', contentType: 'application/json', data: JSON.stringify(data),
+            success: function (r) { if (r.code === 200) { showAlert('success', '已创建'); closeNodeModal(); loadNodes(); } else showAlert('error', r.msg || '创建失败'); },
+            error: function () { showAlert('error', '请求失败'); } });
+    }
+});
+
+function delNode(id) {
+    if (!confirm('确定删除该节点？')) return;
+    $.ajax({ url: API + '/nodes/' + id, type: 'DELETE',
+        success: function (r) { if (r.code === 200) { showAlert('success', '已删除'); loadNodes(); } else showAlert('error', r.msg || '删除失败'); },
+        error: function () { showAlert('error', '请求失败'); } });
+}
+
+loadNodes();
+</script>
+</div>
+</div>
+{{template "admin/admin_footer.html" .}}
+</body>
+</html>

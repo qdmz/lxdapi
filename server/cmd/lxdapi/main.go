@@ -73,6 +73,24 @@ func main() {
 	// 机房数据回填：按节点现有 region 文本建立机房、补齐 region_id（幂等，重复执行无副作用）
 	admin.BackfillNodeRegions()
 
+	// 自动注册本机节点：如果节点表为空，创建一个"本机"节点（host为空=走本地socket）
+	var nodeCount int64
+	db.DB.Model(&models.Node{}).Count(&nodeCount)
+	if nodeCount == 0 {
+		localNode := models.Node{
+			Name:        "本机",
+			Host:        "",
+			APIPort:     0,
+			Status:      "online",
+			Remark:      "自动注册的本机 LXD 节点",
+		}
+		if err := db.DB.Create(&localNode).Error; err != nil {
+			logger.Error("自动注册本机节点失败: %v", err)
+		} else {
+			logger.OK("已自动注册本机节点")
+		}
+	}
+
 	logger.Info("正在初始化网络组件...")
 
 	if err := ipv4.InitManager(); err != nil {

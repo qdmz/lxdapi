@@ -30,5 +30,5 @@ func ImpersonateUser(c *gin.Context) {
 	}
 	admin, _ := c.Get("admin_username")
 	logger.Info("管理员 %v 以用户 %s 身份登录用户中心", admin, u.Username)
-	response.Success(c, gin.H{"username": u.Username, "redirect": "/user/index.html"})
+	response.Success(c, gin.H{"username": u.Username, "redirect": "/user/dashboard"})
 }

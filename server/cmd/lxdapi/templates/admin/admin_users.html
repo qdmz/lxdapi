@@ -491,10 +491,10 @@
                     <tr class="hover">
                         <td>
                             <label>
-                                <input type="checkbox" class="checkbox checkbox-xs user-checkbox" data-user-id="${user.id}" data-username="${user.Username}" data-container-count="${containerCount}" onchange="updateSelection()" />
+                                <input type="checkbox" class="checkbox checkbox-xs user-checkbox" data-user-id="${user.id || user.ID}" data-username="${user.Username}" data-container-count="${containerCount}" onchange="updateSelection()" />
                             </label>
                         </td>
-                        <td class="text-xs text-gray-700">${user.id}</td>
+                        <td class="text-xs text-gray-700">${user.id || user.ID}</td>
                         <td><span class="font-medium text-gray-800">${user.Username}</span></td>
                         <td><span class="text-xs">${containerCount} 个</span></td>
                         <td class="text-xs text-gray-600">${usedCPU} / ${cpuQuota}</td>
@@ -503,10 +503,10 @@
                         <td>${statusBadge}</td>
                         <td>
                             <div class="flex gap-1">
-                                <a href="/admin/users/${user.id}" class="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded transition">详情</a>
-                                <button onclick="showEditModal(${user.id})" class="px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded transition">编辑</button>
-                                <button onclick="impersonateUser(${user.id}, '${user.Username}')" class="px-2 py-1 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded transition">模拟登录</button>
-                                <button onclick="deleteUser(${user.id}, '${user.Username}')" class="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition">删除</button>
+                                <a href="/admin/users/${user.id || user.ID}" class="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded transition">详情</a>
+                                <button onclick="showEditModal(${user.id || user.ID})" class="px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded transition">编辑</button>
+                                <button onclick="impersonateUser(${user.id || user.ID}, '${user.Username}')" class="px-2 py-1 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded transition">模拟登录</button>
+                                <button onclick="deleteUser(${user.id || user.ID}, '${user.Username}')" class="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition">删除</button>
                             </div>
                         </td>
                     </tr>
@@ -850,7 +850,7 @@
                 type: 'POST',
                 success: function(result) {
                     if (result.code === 200) {
-                        window.open('/user/index.html', '_blank');
+                        window.open('/user/dashboard', '_blank');
                     } else {
                         alert(result.msg || '模拟登录失败');
                     }

@@ -83,6 +83,10 @@
                 </div>
             </div>
             <div>
+                <div class="text-xs text-gray-600 mb-1">认证密钥（api_hash）</div>
+                <input id="nodeAPIHash" type="password" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="节点认证密钥，可选" autocomplete="new-password">
+            </div>
+            <div>
                 <div class="text-xs text-gray-600 mb-1">默认镜像</div>
                 <input id="nodeImage" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="debian-12-net">
             </div>
@@ -161,7 +165,7 @@ function renderNodes(nodes) {
     }
     tbody.innerHTML = nodes.map(function (n) {
         return '<tr class="border-t border-gray-100 hover:bg-gray-50">' +
-            '<td class="px-4 py-3 text-gray-500">' + n.id + '</td>' +
+            '<td class="px-4 py-3 text-gray-500">' + (n.id || n.ID) + '</td>' +
             '<td class="px-4 py-3 font-medium text-gray-800">' + esc(n.name) + '</td>' +
             '<td class="px-4 py-3 text-gray-600">' + esc(n.region || '-') + '</td>' +
             '<td class="px-4 py-3 text-gray-600">' + (esc(n.host || '-') + (n.api_port ? ':' + n.api_port : '')) + '</td>' +
@@ -169,8 +173,9 @@ function renderNodes(nodes) {
             '<td class="px-4 py-3">' + statusBadge(n.status || 'online') + '</td>' +
             '<td class="px-4 py-3 text-gray-600">' + n.sort + '</td>' +
             '<td class="px-4 py-3 text-right whitespace-nowrap">' +
-                '<button onclick="editNode(' + n.id + ')" class="text-blue-600 hover:underline text-sm mr-3">编辑</button>' +
-                '<button onclick="delNode(' + n.id + ')" class="text-red-500 hover:underline text-sm">删除</button>' +
+                '<button onclick="testNode(' + (n.id || n.ID) + ')" class="text-green-600 hover:underline text-sm mr-3">测试</button>' +
+                '<button onclick="editNode(' + (n.id || n.ID) + ')" class="text-blue-600 hover:underline text-sm mr-3">编辑</button>' +
+                '<button onclick="delNode(' + (n.id || n.ID) + ')" class="text-red-500 hover:underline text-sm">删除</button>' +
             '</td>' +
         '</tr>';
     }).join('');
@@ -194,6 +199,7 @@ function editNode(id) {
         document.getElementById('nodeRegion').value = n.region || '';
         document.getElementById('nodeHost').value = n.host || '';
         document.getElementById('nodeAPIPort').value = n.api_port || '';
+        document.getElementById('nodeAPIHash').value = n.api_hash || '';
         document.getElementById('nodeImage').value = n.image || '';
         document.getElementById('nodeStoragePool').value = n.storage_pool || '';
         document.getElementById('nodeNetwork').value = n.network || '';
@@ -222,6 +228,7 @@ document.getElementById('nodeForm').addEventListener('submit', function (e) {
         region: document.getElementById('nodeRegion').value,
         host: document.getElementById('nodeHost').value,
         api_port: parseInt(document.getElementById('nodeAPIPort').value || '0', 10),
+        api_hash: document.getElementById('nodeAPIHash').value,
         image: document.getElementById('nodeImage').value,
         storage_pool: document.getElementById('nodeStoragePool').value,
         network: document.getElementById('nodeNetwork').value,
@@ -240,6 +247,22 @@ document.getElementById('nodeForm').addEventListener('submit', function (e) {
             error: function () { showAlert('error', '请求失败'); } });
     }
 });
+
+function testNode(id) {
+    showAlert('success', '正在测试节点连接…');
+    $.ajax({ url: API + '/nodes/' + id + '/test', type: 'POST',
+        success: function (r) {
+            if (r.code === 200) { showAlert('success', '节点连接正常'); }
+            else { showAlert('error', r.msg || '测试失败'); }
+            loadNodes();
+        },
+        error: function (xhr) {
+            var m = '测试失败';
+            try { m = JSON.parse(xhr.responseText).msg || m; } catch (e) {}
+            showAlert('error', m);
+            loadNodes();
+        } });
+}
 
 function delNode(id) {
     if (!confirm('确定删除该节点？')) return;

@@ -655,6 +655,7 @@ func main() {
 	r.GET("/api/public/general-settings", public.GetGeneralSettings)
 	r.GET("/api/public/products", public.GetProducts)
 	r.GET("/api/public/pay-status", payment.GetPayConfigPublic)
+	r.GET("/api/public/captcha", public.GetCaptcha)
 	r.GET("/api/public/version", func(c *gin.Context) {
 		response.Success(c, gin.H{"version": Version})
 	})

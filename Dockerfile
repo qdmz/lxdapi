@@ -12,9 +12,8 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 COPY --from=builder /lxdapi /app/lxdapi
 COPY server/configs/ /app/configs/
-COPY server/templates/ /app/templates/
-COPY server/static/ /app/static/
-COPY web/ /app/web/
+# templates/docs/static 通过 go:embed 编译进二进制，无需复制
+# web/ 是独立前端，如需 nginx 可另起服务
 
 # Railway sets PORT env var
 ENV PORT=8080

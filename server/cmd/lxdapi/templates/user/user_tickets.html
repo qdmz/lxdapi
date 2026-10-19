@@ -94,6 +94,13 @@
 
 <script>
 var API = '/api/user';
+// 后端 gorm.Model 序列化为大写 ID/CreatedAt 等，兼容大小写两种键名
+function gv(o, low, up) {
+    if (!o) return undefined;
+    var v = o[low];
+    return (v === undefined || v === null) ? o[up] : v;
+}
+
 function esc(s) {
     if (s === null || s === undefined) return '';
     return String(s).replace(/[&<>"']/g, function (c) {
@@ -132,17 +139,17 @@ function renderTickets(list) {
         return;
     }
     tbody.innerHTML = list.map(function (t) {
-        var acts = '<a class="text-blue-600 hover:underline text-sm mr-2" href="/user/tickets/' + t.id + '">详情</a>';
-        if (t.status !== 'closed') {
-            acts += '<button class="text-gray-500 hover:underline text-sm" onclick="closeTicket(' + t.id + ')">关闭</button>';
+        var acts = '<a class="text-blue-600 hover:underline text-sm mr-2" href="/user/tickets/' + gv(t,'id','ID') + '">详情</a>';
+        if (gv(t,'status','Status') !== 'closed') {
+            acts += '<button class="text-gray-500 hover:underline text-sm" onclick="closeTicket(' + gv(t,'id','ID') + ')">关闭</button>';
         }
         return '<tr class="border-t border-gray-100 hover:bg-gray-50">' +
-            '<td class="px-4 py-3 text-gray-500">' + t.id + '</td>' +
-            '<td class="px-4 py-3 font-medium text-gray-800">' + esc(t.title) + '</td>' +
-            '<td class="px-4 py-3 text-gray-600">' + typeLabel(t.type) + '</td>' +
-            '<td class="px-4 py-3 text-gray-600">' + priorityLabel(t.priority) + '</td>' +
-            '<td class="px-4 py-3">' + statusBadge(t.status) + '</td>' +
-            '<td class="px-4 py-3 text-gray-500 text-xs">' + fmtTime(t.created_at) + '</td>' +
+            '<td class="px-4 py-3 text-gray-500">' + gv(t,'id','ID') + '</td>' +
+            '<td class="px-4 py-3 font-medium text-gray-800">' + esc(gv(t,'title','Title')) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + typeLabel(gv(t,'type','Type')) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + priorityLabel(gv(t,'priority','Priority')) + '</td>' +
+            '<td class="px-4 py-3">' + statusBadge(gv(t,'status','Status')) + '</td>' +
+            '<td class="px-4 py-3 text-gray-500 text-xs">' + fmtTime(gv(t,'created_at','CreatedAt')) + '</td>' +
             '<td class="px-4 py-3 text-right whitespace-nowrap">' + acts + '</td>' +
         '</tr>';
     }).join('');

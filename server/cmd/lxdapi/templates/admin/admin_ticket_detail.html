@@ -53,6 +53,13 @@
 var API = '/api/admin';
 var ticketId = {{ .id }};
 
+// 后端 gorm.Model 序列化为大写 ID/CreatedAt 等，兼容大小写两种键名
+function gv(o, low, up) {
+    if (!o) return undefined;
+    var v = o[low];
+    return (v === undefined || v === null) ? o[up] : v;
+}
+
 function esc(s) {
     if (s === null || s === undefined) return '';
     return String(s).replace(/[&<>"']/g, function (c) {
@@ -73,10 +80,11 @@ function loadTicket() {
     $.get(API + '/tickets/' + ticketId, function (r) {
         if (r.code !== 200) { alert(r.msg || '加载失败'); return; }
         var t = r.data.ticket;
-        document.getElementById('ticketMeta').textContent = '工单 #' + t.id + ' · ' + statusBadge(t.status) + ' · 创建于 ' + fmtTime(t.created_at);
-        document.getElementById('ticketTitle').textContent = t.title;
-        document.getElementById('ticketContent').textContent = t.content;
-        document.getElementById('replyBox').style.display = (t.status === 'closed') ? 'none' : 'block';
+        var status = gv(t, 'status', 'Status');
+        document.getElementById('ticketMeta').textContent = '工单 #' + gv(t, 'id', 'ID') + ' · ' + statusBadge(status) + ' · 创建于 ' + fmtTime(gv(t, 'created_at', 'CreatedAt'));
+        document.getElementById('ticketTitle').textContent = gv(t, 'title', 'Title');
+        document.getElementById('ticketContent').textContent = gv(t, 'content', 'Content');
+        document.getElementById('replyBox').style.display = (status === 'closed') ? 'none' : 'block';
         renderMessages(r.data.messages || []);
     });
 }
@@ -88,14 +96,15 @@ function renderMessages(msgs) {
         return;
     }
     el.innerHTML = msgs.map(function (m) {
-        var isAdmin = m.is_admin;
+        var isAdmin = gv(m, 'is_admin', 'IsAdmin');
         var align = isAdmin ? 'justify-end' : 'justify-start';
         var bg = isAdmin ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-200';
-        var who = isAdmin ? '管理员' : ((m.user && m.user.username) ? m.user.username : '用户');
+        var uo = gv(m, 'user', 'User') || {};
+        var who = isAdmin ? '管理员' : (uo.username || uo.Username || '用户');
         return '<div class="flex ' + align + '">' +
             '<div class="max-w-[80%]">' +
-            '<div class="text-xs text-gray-400 mb-1">' + esc(who) + ' · ' + fmtTime(m.created_at) + '</div>' +
-            '<div class="px-3 py-2 rounded-lg text-sm border ' + bg + ' text-gray-800 whitespace-pre-wrap">' + esc(m.message) + '</div>' +
+            '<div class="text-xs text-gray-400 mb-1">' + esc(who) + ' · ' + fmtTime(gv(m, 'created_at', 'CreatedAt')) + '</div>' +
+            '<div class="px-3 py-2 rounded-lg text-sm border ' + bg + ' text-gray-800 whitespace-pre-wrap">' + esc(gv(m, 'message', 'Message')) + '</div>' +
             '</div></div>';
     }).join('');
     el.scrollTop = el.scrollHeight;

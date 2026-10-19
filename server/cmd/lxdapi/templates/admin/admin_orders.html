@@ -151,13 +151,13 @@ function renderOrders(list) {
         var node = o.node_name || '-';
         var acts = [];
         if (o.status === 'pending') {
-            acts.push('<button class="text-green-600 hover:underline text-sm mr-2" onclick="markPaid(' + o.id + ')">标记支付</button>');
+            acts.push('<button class="text-green-600 hover:underline text-sm mr-2" onclick="markPaid(' + (o.id || o.ID) + ')">标记支付</button>');
         }
         if (o.status === 'failed' || o.status === 'paid') {
-            acts.push('<button class="text-blue-600 hover:underline text-sm mr-2" onclick="retry(' + o.id + ')">重新开通</button>');
+            acts.push('<button class="text-blue-600 hover:underline text-sm mr-2" onclick="retry(' + (o.id || o.ID) + ')">重新开通</button>');
         }
         if (o.status === 'pending') {
-            acts.push('<button class="text-gray-500 hover:underline text-sm mr-2" onclick="closeOrder(' + o.id + ')">关闭</button>');
+            acts.push('<button class="text-gray-500 hover:underline text-sm mr-2" onclick="closeOrder(' + (o.id || o.ID) + ')">关闭</button>');
         }
         return '<tr class="border-t border-gray-100 hover:bg-gray-50">' +
             '<td class="px-4 py-3 font-mono text-xs text-gray-700">' + esc(o.order_no) + '</td>' +
@@ -168,7 +168,7 @@ function renderOrders(list) {
             '<td class="px-4 py-3">' + statusBadge(o.status) + '</td>' +
             '<td class="px-4 py-3 text-gray-500 text-xs">' + fmtTime(o.created_at) + '</td>' +
             '<td class="px-4 py-3 text-right whitespace-nowrap">' +
-                '<button class="text-gray-600 hover:underline text-sm mr-2" onclick="detail(' + o.id + ')">详情</button>' +
+                '<button class="text-gray-600 hover:underline text-sm mr-2" onclick="detail(' + (o.id || o.ID) + ')">详情</button>' +
                 acts.join('') +
             '</td>' +
         '</tr>';

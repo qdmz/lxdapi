@@ -51,6 +51,13 @@
 
 <script>
 var API = '/api/user';
+// 后端 gorm.Model 序列化为大写 ID/CreatedAt 等，兼容大小写两种键名
+function gv(o, low, up) {
+    if (!o) return undefined;
+    var v = o[low];
+    return (v === undefined || v === null) ? o[up] : v;
+}
+
 var ticketId = {{ .id }};
 
 function esc(s) {
@@ -73,10 +80,10 @@ function loadTicket() {
     $.get(API + '/tickets/' + ticketId, function (r) {
         if (r.code !== 200) { alert(r.msg || '加载失败'); return; }
         var t = r.data;
-        document.getElementById('ticketMeta').textContent = '工单 #' + t.id + ' · ' + statusBadge(t.status);
-        document.getElementById('ticketTitle').textContent = t.title;
-        document.getElementById('ticketContent').textContent = t.content;
-        document.getElementById('replyBox').style.display = (t.status === 'closed') ? 'none' : 'block';
+        document.getElementById('ticketMeta').textContent = '工单 #' + gv(t,'id','ID') + ' · ' + statusBadge(gv(t,'status','Status'));
+        document.getElementById('ticketTitle').textContent = gv(t,'title','Title');
+        document.getElementById('ticketContent').textContent = gv(t,'content','Content');
+        document.getElementById('replyBox').style.display = (gv(t,'status','Status') === 'closed') ? 'none' : 'block';
         loadMessages();
     });
 }
@@ -95,14 +102,14 @@ function renderMessages(msgs) {
         return;
     }
     el.innerHTML = msgs.map(function (m) {
-        var isAdmin = m.is_admin;
+        var isAdmin = gv(m,'is_admin','IsAdmin');
         var align = isAdmin ? 'justify-end' : 'justify-start';
         var bg = isAdmin ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-200';
         var who = isAdmin ? '客服' : '我';
         return '<div class="flex ' + align + '">' +
             '<div class="max-w-[80%]">' +
-            '<div class="text-xs text-gray-400 mb-1">' + esc(who) + ' · ' + fmtTime(m.created_at) + '</div>' +
-            '<div class="px-3 py-2 rounded-lg text-sm border ' + bg + ' text-gray-800 whitespace-pre-wrap">' + esc(m.message) + '</div>' +
+            '<div class="text-xs text-gray-400 mb-1">' + esc(who) + ' · ' + fmtTime(gv(m,'created_at','CreatedAt')) + '</div>' +
+            '<div class="px-3 py-2 rounded-lg text-sm border ' + bg + ' text-gray-800 whitespace-pre-wrap">' + esc(gv(m,'message','Message')) + '</div>' +
             '</div></div>';
     }).join('');
     el.scrollTop = el.scrollHeight;

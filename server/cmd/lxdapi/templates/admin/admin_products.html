@@ -261,10 +261,10 @@
             document.getElementById('productModal').showModal();
         }
 
-        function editProduct(id) {
+        async function editProduct(id) {
             fetch(`${API_BASE}/products/${id}`)
                 .then(res => res.json())
-                .then(data => {
+                .then(async data => {
                     if (data.code === 200) {
                         editingProduct = data.data;
                         document.getElementById('modalTitle').textContent = '编辑产品';
@@ -338,7 +338,7 @@
             try {
                 let res;
                 if (editingProduct) {
-                    res = await fetch(`${API_BASE}/products/${editingProduct.id}`, {
+                    res = await fetch(`${API_BASE}/products/${editingProduct.id || editingProduct.ID}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(productData)

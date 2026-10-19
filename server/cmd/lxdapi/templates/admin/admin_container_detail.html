@@ -1651,13 +1651,13 @@
                 success: function(result) {
                     if (result.code === 200) {
                         var d = result.data; {};
-                        var detail = 'LXD 网段：' + (d.cidr; '-') + '\n\n' +
-                            ((d.actions; []).join('\n'); '（无操作）') +
+                        var detail = 'LXD 网段：' + (d.cidr || '-') + '\n\n' +
+                            ((d.actions || []).join('\n') || '（无操作）') +
                             '\n\n开机持久化：' + (d.persisted ? '已保存' : '未保存（未安装 netfilter-persistent）');
                         showToast('success', '出网规则已重新应用');
                         alert(detail);
                     } else {
-                        showToast('error', result.msg; '修复失败');
+                        showToast('error', result.msg || '修复失败');
                     }
                 },
                 error: function() { showToast('error', '请求失败，请查看后端日志'); }

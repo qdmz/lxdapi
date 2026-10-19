@@ -72,6 +72,7 @@ func CreateOrder(c *gin.Context) {
 		BillingCycle string `json:"billing_cycle"`
 		Quantity     int    `json:"quantity"`
 		PayType      string `json:"pay_type"`
+		CouponCode   string `json:"coupon_code"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, 400, "参数错误")
@@ -107,6 +108,70 @@ func CreateOrder(c *gin.Context) {
 		return
 	}
 
+	// 每用户限购检查
+	if product.MaxPerUser > 0 {
+		var bought int64
+		db.DB.Model(&models.Order{}).Where("user_id = ? AND product_id = ? AND status IN ('paid','active','provisioning')", user.ID, product.ID).Count(&bought)
+		if int(bought)+req.Quantity > product.MaxPerUser {
+			response.Error(c, 400, "该产品每用户限购，超出购买上限")
+			return
+		}
+	}
+
+	// 订单金额 = 产品价格*数量 + 一次性设置费
+	orderAmount := price*float64(req.Quantity) + product.SetupFee
+
+	// 0元订单检查
+	if orderAmount <= 0 && !product.AllowFree {
+		response.Error(c, 400, "该产品不允许0元开通")
+		return
+	}
+
+	// 优惠券验证与折扣计算
+	var couponID uint
+	var discountAmount float64
+	var userCouponID uint
+	if req.CouponCode != "" {
+		var uc models.UserCoupon
+		if err := db.DB.Preload("Coupon").Where("user_id = ? AND status = 'unused'", user.ID).
+			Joins("JOIN coupons ON coupons.id = user_coupons.coupon_id").
+			Where("coupons.code = ?", req.CouponCode).First(&uc).Error; err != nil {
+			response.Error(c, 400, "优惠券无效或已使用")
+			return
+		}
+		cp := uc.Coupon
+		now := time.Now()
+		if cp.Status != "active" {
+			response.Error(c, 400, "优惠券已停用")
+			return
+		}
+		if cp.StartAt != nil && now.Before(*cp.StartAt) {
+			response.Error(c, 400, "优惠券尚未生效")
+			return
+		}
+		if cp.EndAt != nil && now.After(*cp.EndAt) {
+			response.Error(c, 400, "优惠券已过期")
+			return
+		}
+		if cp.MinAmount > 0 && orderAmount < cp.MinAmount {
+			response.Error(c, 400, "订单金额未达到优惠券使用门槛")
+			return
+		}
+		if cp.Type == "percent" {
+			discountAmount = orderAmount * cp.Value / 100
+			if cp.MaxDiscount > 0 && discountAmount > cp.MaxDiscount {
+				discountAmount = cp.MaxDiscount
+			}
+		} else {
+			discountAmount = cp.Value
+		}
+		if discountAmount > orderAmount {
+			discountAmount = orderAmount
+		}
+		couponID = cp.ID
+		userCouponID = uc.ID
+	}
+
 	nodeName := ""
 	if product.NodeID != 0 {
 		var node models.Node
@@ -130,15 +195,32 @@ func CreateOrder(c *gin.Context) {
 		TrafficLimit: product.TrafficLimit,
 		BillingCycle: req.BillingCycle,
 		Quantity:     req.Quantity,
-		Amount:       price * float64(req.Quantity),
+		Amount:       orderAmount - discountAmount,
 		Status:       "pending",
 		PayType:      req.PayType,
+		CouponID:     couponID,
+		CouponCode:   req.CouponCode,
+		DiscountAmount: discountAmount,
 	}
 
-	if err := db.DB.Create(&order).Error; err != nil {
+	tx := db.DB.Begin()
+	if err := tx.Create(&order).Error; err != nil {
+		tx.Rollback()
 		response.Error(c, 500, "创建订单失败")
 		return
 	}
+	// 优惠券核销
+	if userCouponID != 0 {
+		now := time.Now()
+		if err := tx.Model(&models.UserCoupon{}).Where("id = ? AND status = 'unused'", userCouponID).
+			Updates(map[string]interface{}{"status": "used", "used_at": now, "order_id": order.ID}).Error; err != nil {
+			tx.Rollback()
+			response.Error(c, 500, "优惠券核销失败")
+			return
+		}
+		tx.Model(&models.Coupon{}).Where("id = ?", couponID).Update("used_count", gorm.Expr("used_count + 1"))
+	}
+	tx.Commit()
 
 	// 余额支付：无需生成第三方支付链接，订单保持 pending，由 pay-with-balance 完成
 	if order.PayType == "balance" {

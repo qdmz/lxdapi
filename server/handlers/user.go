@@ -98,6 +98,13 @@ func UserTicketDetail(c *gin.Context) {
 	}))
 }
 
+// UserCoupons 我的优惠券页
+func UserCoupons(c *gin.Context) {
+	c.HTML(http.StatusOK, "user/user_coupons.html", utils.MergeTemplateData(c, gin.H{
+		"title": "我的优惠券 - LXD API",
+	}))
+}
+
 // UserNotifications 站内消息页
 func UserNotifications(c *gin.Context) {
 	c.HTML(http.StatusOK, "user/user_notifications.html", utils.MergeTemplateData(c, gin.H{

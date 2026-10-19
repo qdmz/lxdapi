@@ -68,7 +68,10 @@
                     </h1>
                     <p class="text-sm lg:text-base text-gray-600 mt-1">管理容器的IPv4端口转发与NAT规则</p>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex gap-2 items-center flex-wrap">
+                    <select id="nodeSelector" class="select select-bordered select-sm" onchange="loadIPPoolSettings()">
+                        <option value="">全部节点</option>
+                    </select>
                     <button onclick="showNATSwitchSettings()"
                         class="px-3 py-1.5 text-xs font-medium text-gray-700 content-box hover:bg-gray-50 border border-gray-200 rounded-lg transition flex items-center gap-1.5">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -425,14 +428,33 @@
 
             let ipPoolData = [];
 
+            // 加载节点下拉框
+            async function loadNodeSelector() {
+                try {
+                    const resp = await fetch('/api/admin/nodes');
+                    const r = await resp.json();
+                    if (r.code === 200 && r.data) {
+                        const sel = document.getElementById('nodeSelector');
+                        if (sel) {
+                            sel.innerHTML = '<option value="">全部节点</option>' + r.data.map(n =>
+                                `<option value="${n.id || n.ID}">${n.name}</option>`).join('');
+                        }
+                    }
+                } catch (e) { console.error(e); }
+            }
+
             function showIPPoolSettings() {
                 document.getElementById('ipPoolModal').showModal();
                 loadIPPoolSettings();
             }
+            loadNodeSelector();
 
             async function loadIPPoolSettings() {
                 try {
-                    const response = await fetch('/api/admin/nat-config?version=v4');
+                    const nodeId = document.getElementById('nodeSelector')?.value || '';
+                    let url = '/api/admin/nat-config?version=v4';
+                    if (nodeId) url += '&node_id=' + nodeId;
+                    const response = await fetch(url);
                     const result = await response.json();
                     if (result.code === 200 && result.data) {
                         ipPoolData = result.data.configs || [];

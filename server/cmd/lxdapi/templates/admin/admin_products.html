@@ -180,7 +180,7 @@
             if (data.code === 200) {
                 nodesCache = data.data || [];
                 const sel = document.getElementById('productNode');
-                sel.innerHTML = '<option value="0">默认节点</option>' + nodesCache.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
+                sel.innerHTML = '<option value="0">默认节点</option>' + nodesCache.map(n => `<option value="${n.id || n.ID}">${n.name}</option>`).join('');
                 sel.onchange = () => loadNodeImages(sel.value);
             }
         }
@@ -238,7 +238,7 @@
             }
             tbody.innerHTML = products.map(p => `
                 <tr>
-                    <td>${p.id}</td>
+                    <td>${p.id || p.ID}</td>
                     <td>${p.name}</td>
                     <td><span class="badge badge-${p.category === 'kvm' ? 'primary' : 'secondary'}">${p.category.toUpperCase()}</span></td>
                     <td>${p.cpu || '-'}</td>
@@ -247,8 +247,8 @@
                     <td>¥${p.price_monthly || 0}/月</td>
                     <td><span class="badge ${p.status === 'active' ? 'badge-success' : 'badge-ghost'}">${p.status === 'active' ? '启用' : '禁用'}</span></td>
                     <td>
-                        <button class="btn btn-ghost btn-sm" onclick="editProduct(${p.id})">编辑</button>
-                        <button class="btn btn-ghost btn-sm text-error" onclick="deleteProduct(${p.id})">删除</button>
+                        <button class="btn btn-ghost btn-sm" onclick="editProduct(${p.id || p.ID})">编辑</button>
+                        <button class="btn btn-ghost btn-sm text-error" onclick="deleteProduct(${p.id || p.ID})">删除</button>
                     </td>
                 </tr>
             `).join('');

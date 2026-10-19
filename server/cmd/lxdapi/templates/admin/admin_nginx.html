@@ -39,7 +39,10 @@
                 </h1>
                 <p class="text-sm lg:text-base text-gray-600 mt-1">HTTP/HTTPS 反向代理规则管理</p>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2 items-center flex-wrap">
+                <select id="nodeSelector" class="select select-bordered select-sm" onchange="loadProxies()">
+                    <option value="">全部节点</option>
+                </select>
                 <button onclick="showRestrictionsModal()" class="px-3 py-2 text-xs font-medium text-gray-700 content-box hover:bg-gray-50 border border-gray-200 rounded-lg transition flex items-center gap-1.5">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
@@ -240,7 +243,23 @@
         let totalPages = 1;
         let config = null;
 
+        // 加载节点下拉框
+        async function loadNodeSelector() {
+            try {
+                const resp = await fetch('/api/admin/nodes');
+                const r = await resp.json();
+                if (r.code === 200 && r.data) {
+                    const sel = document.getElementById('nodeSelector');
+                    if (sel) {
+                        sel.innerHTML = '<option value="">全部节点</option>' + r.data.map(n =>
+                            `<option value="${n.id || n.ID}">${n.name}</option>`).join('');
+                    }
+                }
+            } catch (e) { console.error(e); }
+        }
+
         $(document).ready(function() {
+            loadNodeSelector();
             loadStatus();
             loadProxies();
             loadContainers();
@@ -401,7 +420,10 @@
 
         async function loadProxies() {
             try {
-                const response = await fetch('/api/admin/nginx/proxies');
+                const nodeId = document.getElementById('nodeSelector')?.value || '';
+                let url = '/api/admin/nginx/proxies';
+                if (nodeId) url += '?node_id=' + nodeId;
+                const response = await fetch(url);
                 const result = await response.json();
                 if (result.code === 200) {
                     allProxies = result.data || [];

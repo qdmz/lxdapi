@@ -50,7 +50,10 @@
                 </h1>
                 <p class="text-sm lg:text-base text-gray-600 mt-1">管理独立公网IPv6地址的分配与绑定</p>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2 items-center flex-wrap">
+                <select id="nodeSelector" class="select select-bordered select-sm" onchange="loadPoolData()">
+                    <option value="">全部节点</option>
+                </select>
                 <button onclick="showAddModal()" class="px-3 py-2 text-xs lg:text-sm font-medium text-gray-700 content-box hover:bg-gray-50 border border-gray-200 rounded-lg transition flex items-center justify-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -293,8 +296,24 @@
         let poolCurrentPage = 1;
         let bindingsCurrentPage = 1;
 
+        // 加载节点下拉框
+        async function loadNodeSelector() {
+            try {
+                const resp = await fetch('/api/admin/nodes');
+                const r = await resp.json();
+                if (r.code === 200 && r.data) {
+                    const sel = document.getElementById('nodeSelector');
+                    if (sel) {
+                        sel.innerHTML = '<option value="">全部节点</option>' + r.data.map(n =>
+                            `<option value="${n.id || n.ID}">${n.name}</option>`).join('');
+                    }
+                }
+            } catch (e) { console.error(e); }
+        }
+
         $(document).ready(function() {
             setTimeout(() => {
+                loadNodeSelector();
                 loadPoolData();
                 loadBindingsData();
             }, 100);
@@ -356,7 +375,10 @@
 
         async function loadPoolData() {
             try {
-                const response = await fetch('/api/admin/ip/pool?version=v6');
+                const nodeId = document.getElementById('nodeSelector')?.value || '';
+                let url = '/api/admin/ip/pool?version=v6';
+                if (nodeId) url += '&node_id=' + nodeId;
+                const response = await fetch(url);
                 const result = await response.json();
                 if (result.code === 200 && result.data) {
                     allPools = result.data.pools || [];

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <link href="/static/css/daisyui.min.css" rel="stylesheet">
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    {{else}}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {{end}}
+</head>
+<body class="min-h-screen flex flex-col" style="background-color:#f9fafb">
+<div class="flex-1">
+<div class="max-w-4xl mx-auto px-4 py-8">
+    <div class="mb-6">
+        <a href="/" class="text-sm text-blue-600 hover:underline">&larr; 返回首页</a>
+        <h1 class="text-2xl font-bold text-gray-800 mt-2">帮助中心</h1>
+        <p class="text-sm text-gray-500 mt-1">常见问题与使用文档</p>
+    </div>
+
+    <div id="articleList" class="space-y-3"></div>
+
+    <div id="articleDetail" class="hidden bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <button onclick="backToList()" class="text-sm text-blue-600 hover:underline mb-4">&larr; 返回列表</button>
+        <h2 id="detailTitle" class="text-xl font-bold text-gray-800 mb-2"></h2>
+        <div id="detailMeta" class="text-xs text-gray-400 mb-4"></div>
+        <div id="detailContent" class="prose prose-sm max-w-none text-gray-700"></div>
+    </div>
+</div>
+</div>
+
+<script>
+function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+function fmtTime(s) {
+    if (!s) return '';
+    return String(s).replace('T', ' ').substring(0, 10);
+}
+
+function loadList(category) {
+    var url = '/api/public/knowledge';
+    if (category) url += '?category=' + encodeURIComponent(category);
+    $.get(url, function (r) {
+        if (r.code !== 200) { alert(r.msg || '加载失败'); return; }
+        renderList(r.data || []);
+    });
+}
+
+function renderList(list) {
+    var html = '';
+    if (!list.length) html = '<p class="text-center text-gray-400 py-8">暂无文章</p>';
+    list.forEach(function (a) {
+        var id = a.id || a.ID;
+        html += '<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition cursor-pointer" onclick="showDetail(' + id + ')">' +
+            '<h3 class="font-medium text-gray-800">' + esc(a.title) + '</h3>' +
+            '<div class="text-xs text-gray-400 mt-1">' + esc(a.category || '') + ' · ' + fmtTime(a.created_at || a.CreatedAt) + '</div>' +
+            '</div>';
+    });
+    document.getElementById('articleList').innerHTML = html;
+    document.getElementById('articleList').classList.remove('hidden');
+    document.getElementById('articleDetail').classList.add('hidden');
+}
+
+function showDetail(id) {
+    $.get('/api/public/knowledge/' + id, function (r) {
+        if (r.code !== 200) { alert(r.msg || '加载失败'); return; }
+        var a = r.data || {};
+        document.getElementById('detailTitle').textContent = a.title || '';
+        document.getElementById('detailMeta').textContent = (a.category || '') + ' · ' + fmtTime(a.created_at || a.CreatedAt);
+        document.getElementById('detailContent').innerHTML = a.content || '';
+        document.getElementById('articleList').classList.add('hidden');
+        document.getElementById('articleDetail').classList.remove('hidden');
+        window.scrollTo(0, 0);
+    });
+}
+
+function backToList() {
+    document.getElementById('articleList').classList.remove('hidden');
+    document.getElementById('articleDetail').classList.add('hidden');
+}
+
+// 支持直接打开详情：/knowledge?id=123
+(function () {
+    var m = location.search.match(/[?&]id=(\d+)/);
+    if (m) { showDetail(m[1]); }
+    else { loadList(); }
+})();
+</script>
+</body>
+</html>

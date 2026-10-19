@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <link href="/static/css/daisyui.min.css" rel="stylesheet">
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    {{else}}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {{end}}
+</head>
+<body class="min-h-screen flex flex-col" style="background-color:#f9fafb">
+{{template "admin/admin_header.html" .}}
+<div class="flex-1" style="background-color: #f9fafb;">
+<div class="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
+        <div>
+            <h1 class="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+                <span class="iconify" data-icon="mdi:ticket-percent-outline" data-width="20"></span>优惠券管理
+            </h1>
+            <p class="text-xs sm:text-sm text-gray-500 mt-1">创建优惠券，用户凭券码领取，下单时抵扣。</p>
+        </div>
+        <button onclick="showEditModal()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">新建优惠券</button>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead>
+                <tr class="bg-gray-50 text-gray-600">
+                    <th class="px-4 py-3 text-left font-medium">ID</th>
+                    <th class="px-4 py-3 text-left font-medium">券码</th>
+                    <th class="px-4 py-3 text-left font-medium">名称</th>
+                    <th class="px-4 py-3 text-left font-medium">类型</th>
+                    <th class="px-4 py-3 text-left font-medium">面值</th>
+                    <th class="px-4 py-3 text-left font-medium">最低金额</th>
+                    <th class="px-4 py-3 text-left font-medium">已用/总量</th>
+                    <th class="px-4 py-3 text-left font-medium">有效期</th>
+                    <th class="px-4 py-3 text-left font-medium">状态</th>
+                    <th class="px-4 py-3 text-right font-medium">操作</th>
+                </tr>
+            </thead>
+            <tbody id="couponTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 编辑弹窗 -->
+<div id="editModal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background-color: rgba(0,0,0,0.5);">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
+            <h3 id="modalTitle" class="text-lg font-semibold text-gray-800">新建优惠券</h3>
+            <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div class="p-4 grid grid-cols-2 gap-4">
+            <input type="hidden" id="editId">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">券码 <span class="text-red-500">*</span></label>
+                <input type="text" id="editCode" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="如：SAVE10">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">名称 <span class="text-red-500">*</span></label>
+                <input type="text" id="editName" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="如：新用户立减10元">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">类型</label>
+                <select id="editType" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="fixed">固定金额（元）</option>
+                    <option value="percent">百分比（%）</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">面值</label>
+                <input type="number" step="0.01" id="editValue" value="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">最低订单金额（0=不限）</label>
+                <input type="number" step="0.01" id="editMinAmount" value="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">百分比最高抵扣（元）</label>
+                <input type="number" step="0.01" id="editMaxDiscount" value="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">发行总量（0=不限）</label>
+                <input type="number" id="editTotalCount" value="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">每用户限领（0=不限）</label>
+                <input type="number" id="editPerUserLimit" value="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">生效时间（留空=立即）</label>
+                <input type="datetime-local" id="editStartAt" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">过期时间（留空=永不过期）</label>
+                <input type="datetime-local" id="editEndAt" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">状态</label>
+                <select id="editStatus" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="active">启用</option>
+                    <option value="disabled">停用</option>
+                </select>
+            </div>
+            <div class="col-span-2">
+                <label class="block text-sm font-medium text-gray-700 mb-1">备注</label>
+                <input type="text" id="editRemark" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+        </div>
+        <div class="flex justify-end gap-2 p-4 border-t bg-gray-50 rounded-b-lg sticky bottom-0">
+            <button onclick="closeModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg">取消</button>
+            <button onclick="saveCoupon()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">保存</button>
+        </div>
+    </div>
+</div>
+
+<script>
+var API = '/api/admin/coupons';
+
+function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+function fmtTime(s) {
+    if (!s) return '-';
+    return String(s).replace('T', ' ').substring(0, 16);
+}
+function typeLabel(t) { return t === 'percent' ? '百分比' : '固定金额'; }
+function valueLabel(c) {
+    if (c.type === 'percent') return c.value + '%';
+    return '¥' + c.value;
+}
+
+function loadCoupons() {
+    $.get(API, function (r) {
+        if (r.code !== 200) { alert(r.msg || '加载失败'); return; }
+        renderCoupons(r.data || []);
+    });
+}
+
+function renderCoupons(list) {
+    var html = '';
+    if (!list.length) html = '<tr><td colspan="10" class="px-4 py-8 text-center text-gray-400">暂无优惠券</td></tr>';
+    list.forEach(function (c) {
+        var id = c.id || c.ID;
+        var period = fmtTime(c.start_at || c.StartAt) + ' ~ ' + fmtTime(c.end_at || c.EndAt);
+        var statusBadge = c.status === 'active'
+            ? '<span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">启用</span>'
+            : '<span class="px-2 py-0.5 rounded-full text-xs bg-gray-200 text-gray-600">停用</span>';
+        html += '<tr class="border-t hover:bg-gray-50">' +
+            '<td class="px-4 py-3 text-gray-500">' + id + '</td>' +
+            '<td class="px-4 py-3 font-mono font-medium text-gray-800">' + esc(c.code) + '</td>' +
+            '<td class="px-4 py-3 text-gray-800">' + esc(c.name) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + typeLabel(c.type) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + valueLabel(c) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">¥' + (c.min_amount || 0) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + (c.used_count || 0) + ' / ' + (c.total_count || '∞') + '</td>' +
+            '<td class="px-4 py-3 text-gray-500 text-xs">' + period + '</td>' +
+            '<td class="px-4 py-3">' + statusBadge + '</td>' +
+            '<td class="px-4 py-3 text-right whitespace-nowrap">' +
+                '<button onclick="showStats(' + id + ')" class="text-gray-600 hover:underline text-sm mr-3">统计</button>' +
+                '<button onclick="showEditModal(' + id + ')" class="text-blue-600 hover:underline text-sm mr-3">编辑</button>' +
+                '<button onclick="delCoupon(' + id + ')" class="text-red-500 hover:underline text-sm">删除</button>' +
+            '</td></tr>';
+    });
+    document.getElementById('couponTable').innerHTML = html;
+}
+
+function toLocalInput(s) {
+    if (!s) return '';
+    return String(s).substring(0, 16);
+}
+
+function showEditModal(id) {
+    ['editId','editCode','editName'].forEach(function (k) { document.getElementById(k).value = ''; });
+    document.getElementById('editType').value = 'fixed';
+    document.getElementById('editValue').value = '0';
+    document.getElementById('editMinAmount').value = '0';
+    document.getElementById('editMaxDiscount').value = '0';
+    document.getElementById('editTotalCount').value = '0';
+    document.getElementById('editPerUserLimit').value = '1';
+    document.getElementById('editStartAt').value = '';
+    document.getElementById('editEndAt').value = '';
+    document.getElementById('editStatus').value = 'active';
+    document.getElementById('editRemark').value = '';
+    document.getElementById('modalTitle').textContent = '新建优惠券';
+    if (id) {
+        $.get(API, function (r) {
+            if (r.code === 200) {
+                var c = (r.data || []).find(function (x) { return (x.id || x.ID) == id; });
+                if (c) {
+                    document.getElementById('editId').value = id;
+                    document.getElementById('editCode').value = c.code || '';
+                    document.getElementById('editName').value = c.name || '';
+                    document.getElementById('editType').value = c.type || 'fixed';
+                    document.getElementById('editValue').value = c.value || 0;
+                    document.getElementById('editMinAmount').value = c.min_amount || 0;
+                    document.getElementById('editMaxDiscount').value = c.max_discount || 0;
+                    document.getElementById('editTotalCount').value = c.total_count || 0;
+                    document.getElementById('editPerUserLimit').value = c.per_user_limit != null ? c.per_user_limit : 1;
+                    document.getElementById('editStartAt').value = toLocalInput(c.start_at || c.StartAt);
+                    document.getElementById('editEndAt').value = toLocalInput(c.end_at || c.EndAt);
+                    document.getElementById('editStatus').value = c.status || 'active';
+                    document.getElementById('editRemark').value = c.remark || '';
+                    document.getElementById('modalTitle').textContent = '编辑优惠券';
+                }
+            }
+        });
+    }
+    var m = document.getElementById('editModal');
+    m.classList.remove('hidden'); m.classList.add('flex');
+}
+function closeModal() {
+    var m = document.getElementById('editModal');
+    m.classList.add('hidden'); m.classList.remove('flex');
+}
+function saveCoupon() {
+    var id = document.getElementById('editId').value;
+    var data = {
+        code: document.getElementById('editCode').value.trim(),
+        name: document.getElementById('editName').value.trim(),
+        type: document.getElementById('editType').value,
+        value: parseFloat(document.getElementById('editValue').value) || 0,
+        min_amount: parseFloat(document.getElementById('editMinAmount').value) || 0,
+        max_discount: parseFloat(document.getElementById('editMaxDiscount').value) || 0,
+        total_count: parseInt(document.getElementById('editTotalCount').value) || 0,
+        per_user_limit: parseInt(document.getElementById('editPerUserLimit').value) || 0,
+        status: document.getElementById('editStatus').value,
+        remark: document.getElementById('editRemark').value.trim()
+    };
+    var sa = document.getElementById('editStartAt').value;
+    var ea = document.getElementById('editEndAt').value;
+    if (sa) data.start_at = sa + ':00';
+    if (ea) data.end_at = ea + ':00';
+    if (!data.code || !data.name) { alert('券码和名称必填'); return; }
+    $.ajax({
+        url: id ? API + '/' + id : API,
+        type: id ? 'PUT' : 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function (r) {
+            if (r.code === 200) { closeModal(); loadCoupons(); }
+            else alert(r.msg || '保存失败');
+        },
+        error: function () { alert('请求失败'); }
+    });
+}
+function delCoupon(id) {
+    if (!confirm('确定删除这张优惠券吗？已领取的用户券不受影响。')) return;
+    $.ajax({
+        url: API + '/' + id, type: 'DELETE',
+        success: function (r) {
+            if (r.code === 200) loadCoupons();
+            else alert(r.msg || '删除失败');
+        },
+        error: function () { alert('请求失败'); }
+    });
+}
+function showStats(id) {
+    $.get(API + '/' + id + '/stats', function (r) {
+        if (r.code === 200) {
+            alert('领取总数：' + (r.data.total || 0) + '\n已使用：' + (r.data.used || 0));
+        } else alert(r.msg || '获取失败');
+    });
+}
+loadCoupons();
+</script>
+{{template "admin/admin_footer.html" .}}
+</div>
+</div>
+</body>
+</html>

@@ -49,4 +49,9 @@ type Order struct {
 	PaidAt   *time.Time `json:"paid_at"`
 	ExpireAt *time.Time `json:"expire_at"`
 	Remark   string `gorm:"size:500" json:"remark"`
+
+	// 优惠券
+	CouponID       uint    `gorm:"index" json:"coupon_id"`
+	CouponCode     string  `gorm:"size:50" json:"coupon_code"`
+	DiscountAmount float64 `gorm:"type:decimal(10,2);default:0" json:"discount_amount"`
 }

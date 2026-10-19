@@ -65,7 +65,10 @@
                             <div id="statusDetails" class="text-xs text-gray-600"></div>
                         </div>
                     </div>
-                    <div class="flex gap-2">
+                    <div class="flex gap-2 items-center">
+                        <select id="nodeSelector" class="select select-bordered select-sm" onchange="loadConfig()">
+                            <option value="">默认节点</option>
+                        </select>
                         <button id="btnStart" onclick="startService()" class="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded transition">启动</button>
                         <button id="btnStop" onclick="stopService()" class="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition">停止</button>
                         <button id="btnRestart" onclick="restartService()" class="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition">重启</button>
@@ -119,7 +122,21 @@
     {{template "admin/admin_toast.html" .}}
 
     <script>
+        // 加载节点下拉框
+        function loadNodeSelector() {
+            $.get('/api/admin/nodes', function(r) {
+                if (r.code === 200 && r.data) {
+                    const sel = document.getElementById('nodeSelector');
+                    if (sel) {
+                        sel.innerHTML = '<option value="">默认节点</option>' + r.data.map(n =>
+                            `<option value="${n.id || n.ID}">${n.name}</option>`).join('');
+                    }
+                }
+            });
+        }
+
         $(document).ready(function() {
+            loadNodeSelector();
             loadConfig();
             loadStatus();
             setInterval(loadStatus, 5000);
@@ -140,7 +157,10 @@
         }
 
         function loadConfig() {
-            $.get('/api/admin/firewall/config', function(res) {
+            const nodeId = document.getElementById('nodeSelector')?.value || '';
+            let url = '/api/admin/firewall/config';
+            if (nodeId) url += '?node_id=' + nodeId;
+            $.get(url, function(res) {
                 if (res.code === 200) {
                     $('#rulesEditor').val(res.data.rules || '');
                 }
@@ -151,9 +171,11 @@
             const config = {
                 rules: $('#rulesEditor').val()
             };
-            
+            const nodeId = document.getElementById('nodeSelector')?.value || '';
+            let url = '/api/admin/firewall/config';
+            if (nodeId) url += '?node_id=' + nodeId;
             return $.ajax({
-                url: '/api/admin/firewall/config',
+                url: url,
                 method: 'PUT',
                 contentType: 'application/json',
                 data: JSON.stringify(config),

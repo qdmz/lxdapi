@@ -339,6 +339,20 @@ func main() {
 
 	pluginManager.RegisterRoutes(r)
 
+	r.GET("/knowledge", func(c *gin.Context) {
+		svc := service.NewBrandService()
+		siteName := "LXD 容器云"
+		if bs, err := svc.GetSettings(); err == nil {
+			if bs.UserSystemName != "" {
+				siteName = bs.UserSystemName
+			}
+		}
+		c.HTML(http.StatusOK, "public/knowledge.html", utils.MergeTemplateData(c, gin.H{
+			"title":    "帮助中心 - " + siteName,
+			"SiteName": siteName,
+		}))
+	})
+
 	r.GET("/", func(c *gin.Context) {
 		sysInfo := sysinfo.GetSystemInfo()
 		svc := service.NewBrandService()
@@ -414,6 +428,8 @@ func main() {
 		adminPages.GET("/tickets", handlers.AdminTickets)
 		adminPages.GET("/tickets/:id", handlers.AdminTicketDetail)
 		adminPages.GET("/messages", handlers.AdminMessages)
+		adminPages.GET("/knowledge", handlers.AdminKnowledge)
+		adminPages.GET("/coupons", handlers.AdminCoupons)
 		adminPages.GET("/payment", handlers.AdminPaymentSettings)
 		adminPages.GET("/brand-settings", handlers.AdminBrandSettings)
 		adminPages.GET("/firewall", handlers.AdminFirewall)
@@ -462,6 +478,7 @@ func main() {
 		userPages.GET("/tickets", handlers.UserTickets)
 		userPages.GET("/tickets/:id", handlers.UserTicketDetail)
 		userPages.GET("/notifications", handlers.UserNotifications)
+		userPages.GET("/coupons", handlers.UserCoupons)
 	}
 
 	r.GET("/container/login", handlers.ContainerLogin)

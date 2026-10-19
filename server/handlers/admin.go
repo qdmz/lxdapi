@@ -277,6 +277,20 @@ func AdminMessages(c *gin.Context) {
 	}))
 }
 
+// AdminKnowledge 知识库管理页
+func AdminKnowledge(c *gin.Context) {
+	c.HTML(http.StatusOK, "admin/admin_knowledge.html", utils.MergeTemplateData(c, gin.H{
+		"title": "知识库管理 - LXD API",
+	}))
+}
+
+// AdminCoupons 优惠券管理页
+func AdminCoupons(c *gin.Context) {
+	c.HTML(http.StatusOK, "admin/admin_coupons.html", utils.MergeTemplateData(c, gin.H{
+		"title": "优惠券管理 - LXD API",
+	}))
+}
+
 // AdminPaymentSettings 支付配置页
 func AdminPaymentSettings(c *gin.Context) {
 	c.HTML(http.StatusOK, "admin/admin_payment.html", utils.MergeTemplateData(c, gin.H{

@@ -29,11 +29,15 @@
         }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center relative" style="{{if .BgImage}}background-image: url('{{.BgImage}}'); background-size: cover; background-position: center;{{else}}background: linear-gradient(135deg, rgb(239 246 255) 0%, rgb(224 231 255) 50%, rgb(237 233 254) 100%);{{end}}">
+<body class="min-h-screen flex flex-col relative" style="{{if .BgImage}}background-image: url('{{.BgImage}}'); background-size: cover; background-position: center;{{else}}background: linear-gradient(135deg, rgb(239 246 255) 0%, rgb(224 231 255) 50%, rgb(237 233 254) 100%);{{end}}">
     {{if .BgImage}}
     <div class="absolute inset-0 bg-white" style="opacity: {{.BgOpacity}}%;"></div>
     {{end}}
-    <div class="relative z-10 w-full max-w-lg px-3 sm:px-4">
+<!-- 统一页眉 -->
+<header class="relative z-10 w-full py-4 px-6 flex items-center justify-between">
+    <a href="/" class="text-lg font-bold text-gray-800">{{if .SiteName}}{{.SiteName}}{{else}}LXD 容器面板{{end}}</a>
+</header>
+    <div class="relative z-10 w-full max-w-lg px-3 sm:px-4 mx-auto flex-1 flex items-center">
     <div class="content-box rounded-2xl shadow-2xl p-4 sm:p-6 w-full">
         <div class="text-center mb-4 sm:mb-6">
             <div class="flex justify-center mb-2 sm:mb-3">
@@ -146,7 +150,7 @@
         
         async function refreshCaptcha() {
             try {
-                const response = await fetch('/api/user/captcha');
+                const response = await fetch('/api/public/captcha');
                 const result = await response.json();
                 if (result.code === 200) {
                     document.getElementById('captchaImg').src = result.image;
@@ -244,5 +248,9 @@
     }
 })();
 </script>
+<!-- 统一页脚 -->
+<footer class="relative z-10 w-full py-4 text-center text-xs text-gray-500">
+    {{if .SiteName}}{{.SiteName}}{{else}}LXD 容器面板{{end}} &copy; 2026
+</footer>
 </body>
 </html>

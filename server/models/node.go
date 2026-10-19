@@ -10,6 +10,7 @@ type Node struct {
 	RegionID    uint   `gorm:"index;default:0" json:"region_id"` // 所属机房
 	Host        string `gorm:"size:255" json:"host"`
 	APIPort     int    `gorm:"default:0" json:"api_port"`
+	APIHash     string `gorm:"size:255" json:"api_hash"`     // 节点认证密钥
 	Image       string `gorm:"size:255" json:"image"`
 	StoragePool string `gorm:"size:100" json:"storage_pool"`
 	Network     string `gorm:"size:100" json:"network"`

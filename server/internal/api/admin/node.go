@@ -1,8 +1,12 @@
 package admin
 
 import (
+	"context"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"lxdapi/internal/db"
+	"lxdapi/internal/lxc"
 	"lxdapi/models"
 	"lxdapi/pkg/response"
 )
@@ -79,6 +83,7 @@ func UpdateNode(c *gin.Context) {
 	node.RegionID = r.ID
 	node.Host = input.Host
 	node.APIPort = input.APIPort
+	node.APIHash = input.APIHash
 	node.Image = input.Image
 	node.StoragePool = input.StoragePool
 	node.Network = input.Network
@@ -104,4 +109,31 @@ func DeleteNode(c *gin.Context) {
 		return
 	}
 	response.Success(c, nil)
+}
+
+// TestNode 测试节点连通性
+// @Summary 测试节点
+// @Tags Admin API - 节点
+// @Router /api/admin/nodes/:id/test [post]
+func TestNode(c *gin.Context) {
+	var node models.Node
+	if err := db.DB.First(&node, c.Param("id")).Error; err != nil {
+		response.Error(c, 404, "节点不存在")
+		return
+	}
+	if node.Host == "" {
+		response.Error(c, 400, "节点未配置 Host，无法测试")
+		return
+	}
+	// 用 lxc info 测试连通性（10秒超时）
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client := lxc.NewRemoteClient(node.Host, node.APIPort)
+	if err := client.Info(ctx); err != nil {
+		db.DB.Model(&node).Update("status", "offline")
+		response.Error(c, 400, "节点不可达: "+err.Error())
+		return
+	}
+	db.DB.Model(&node).Update("status", "online")
+	response.Success(c, gin.H{"status": "online"})
 }

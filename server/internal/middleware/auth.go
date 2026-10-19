@@ -84,6 +84,7 @@ func UserAuth() gin.HandlerFunc {
 		
 		c.Set("auth_level", auth.LevelUser)
 		c.Set("username", username.(string))
+		c.Set("user_id", user.ID)
 		c.Next()
 	}
 }

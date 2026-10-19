@@ -238,7 +238,7 @@ document.getElementById('nodeForm').addEventListener('submit', function (e) {
     };
     if (!data.name) { showAlert('error', '请填写节点名称'); return; }
     if (editingNode) {
-        $.ajax({ url: API + '/nodes/' + editingNode.id, type: 'PUT', contentType: 'application/json', data: JSON.stringify(data),
+        $.ajax({ url: API + '/nodes/' + (editingNode.id || editingNode.ID), type: 'PUT', contentType: 'application/json', data: JSON.stringify(data),
             success: function (r) { if (r.code === 200) { showAlert('success', '已保存'); closeNodeModal(); loadNodes(); } else showAlert('error', r.msg || '保存失败'); },
             error: function () { showAlert('error', '请求失败'); } });
     } else {

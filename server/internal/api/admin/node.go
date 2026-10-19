@@ -121,14 +121,16 @@ func TestNode(c *gin.Context) {
 		response.Error(c, 404, "节点不存在")
 		return
 	}
-	if node.Host == "" {
-		response.Error(c, 400, "节点未配置 Host，无法测试")
-		return
-	}
 	// 用 lxc info 测试连通性（10秒超时）
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	client := lxc.NewRemoteClient(node.Host, node.APIPort)
+	var client *lxc.Client
+	if node.Host == "" {
+		// 本机节点：用本地 socket
+		client = lxc.NewClient()
+	} else {
+		client = lxc.NewRemoteClient(node.Host, node.APIPort)
+	}
 	if err := client.Info(ctx); err != nil {
 		db.DB.Model(&node).Update("status", "offline")
 		response.Error(c, 400, "节点不可达: "+err.Error())

@@ -16,13 +16,17 @@ func NewStorageService() *StorageService {
 	return &StorageService{lxcClient: lxc.NewClient()}
 }
 
-func (s *StorageService) List() ([]models.StoragePool, error) {
+func (s *StorageService) List(nodeID uint) ([]models.StoragePool, error) {
 	var pools []models.StoragePool
-	err := db.DB.Order("priority ASC, name ASC").Find(&pools).Error
+	query := db.DB.Order("priority ASC, name ASC")
+	if nodeID > 0 {
+		query = query.Where("node_id = ?", nodeID)
+	}
+	err := query.Find(&pools).Error
 	return pools, err
 }
 
-func (s *StorageService) SyncFromLXD(ctx context.Context) (int, int, int, error) {
+func (s *StorageService) SyncFromLXD(ctx context.Context, nodeID uint) (int, int, int, error) {
 	logger.Info("开始从LXD同步存储池")
 
 	pools, err := s.lxcClient.ListStoragePools(ctx)
@@ -43,9 +47,10 @@ func (s *StorageService) SyncFromLXD(ctx context.Context) (int, int, int, error)
 		}
 
 		var existing models.StoragePool
-		err := db.DB.Where("name = ?", p.Name).First(&existing).Error
+		err := db.DB.Where("name = ? AND node_id = ?", p.Name, nodeID).First(&existing).Error
 
 		pool := models.StoragePool{
+			NodeID:      nodeID,
 			Name:        p.Name,
 			Driver:      p.Driver,
 			Description: p.Description,
@@ -71,7 +76,7 @@ func (s *StorageService) SyncFromLXD(ctx context.Context) (int, int, int, error)
 	}
 
 	var dbPools []models.StoragePool
-	db.DB.Find(&dbPools)
+	db.DB.Where("node_id = ?", nodeID).Find(&dbPools)
 	deleted := 0
 	for _, dbPool := range dbPools {
 		if !lxdPools[dbPool.Name] {

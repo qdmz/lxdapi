@@ -4,6 +4,7 @@ import "time"
 
 type IPPoolSettings struct {
 	ID                        int       `gorm:"primaryKey" json:"id"`
+	NodeID                    uint      `gorm:"index" json:"node_id"` // 所属节点，0=全局/未分配
 	RandomAssign              bool      `gorm:"default:false" json:"random_assign"`
 	AutoAssign                bool      `gorm:"default:false" json:"auto_assign"`
 	AllowUserReleaseIPv4      bool      `gorm:"default:false" json:"allow_user_release_ipv4"`

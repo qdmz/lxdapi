@@ -204,12 +204,21 @@ func GetIPPool(c *gin.Context) {
 		response.Error(c, 400, "version参数必须是v4或v6")
 		return
 	}
+	nodeID := parseNodeIDQuery(c)
 
 	if version == "v4" {
 		var pools []models.IPv4Pool
 		var total int64
-		db.DB.Model(&models.IPv4Pool{}).Count(&total)
-		db.DB.Order("ip_address").Find(&pools)
+		query := db.DB.Model(&models.IPv4Pool{})
+		if nodeID > 0 {
+			query = query.Where("node_id = ?", nodeID)
+		}
+		query.Count(&total)
+		q2 := db.DB.Model(&models.IPv4Pool{}).Order("ip_address")
+		if nodeID > 0 {
+			q2 = q2.Where("node_id = ?", nodeID)
+		}
+		q2.Find(&pools)
 		response.Success(c, gin.H{
 			"pools": pools,
 			"total": total,
@@ -217,8 +226,16 @@ func GetIPPool(c *gin.Context) {
 	} else {
 		var pools []models.IPv6Pool
 		var total int64
-		db.DB.Model(&models.IPv6Pool{}).Count(&total)
-		db.DB.Order("ip_address").Find(&pools)
+		query := db.DB.Model(&models.IPv6Pool{})
+		if nodeID > 0 {
+			query = query.Where("node_id = ?", nodeID)
+		}
+		query.Count(&total)
+		q2 := db.DB.Model(&models.IPv6Pool{}).Order("ip_address")
+		if nodeID > 0 {
+			q2 = q2.Where("node_id = ?", nodeID)
+		}
+		q2.Find(&pools)
 		response.Success(c, gin.H{
 			"pools": pools,
 			"total": total,
@@ -250,6 +267,7 @@ func AddIPToPool(c *gin.Context) {
 		IPAddress string `json:"ip_address" binding:"required"`
 		Interface string `json:"interface" binding:"required"`
 		Note      string `json:"note"`
+		NodeID    uint   `json:"node_id"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -270,6 +288,7 @@ func AddIPToPool(c *gin.Context) {
 		}
 
 		pool := &models.IPv4Pool{
+			NodeID:    req.NodeID,
 			IPAddress: req.IPAddress,
 			Interface: req.Interface,
 			Status:    "available",
@@ -290,6 +309,7 @@ func AddIPToPool(c *gin.Context) {
 		}
 
 		pool := &models.IPv6Pool{
+			NodeID:    req.NodeID,
 			IPAddress: req.IPAddress,
 			Interface: req.Interface,
 			Status:    "available",
@@ -501,6 +521,7 @@ func BatchAddIPToPool(c *gin.Context) {
 		Count     int    `json:"count"`
 		Interface string `json:"interface" binding:"required"`
 		Note      string `json:"note"`
+		NodeID    uint   `json:"node_id"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -549,6 +570,7 @@ func BatchAddIPToPool(c *gin.Context) {
 				continue
 			}
 			pool := &models.IPv4Pool{
+				NodeID:    req.NodeID,
 				IPAddress: ip,
 				Interface: req.Interface,
 				Status:    "available",
@@ -566,6 +588,7 @@ func BatchAddIPToPool(c *gin.Context) {
 				continue
 			}
 			pool := &models.IPv6Pool{
+				NodeID:    req.NodeID,
 				IPAddress: ip,
 				Interface: req.Interface,
 				Status:    "available",
@@ -653,10 +676,12 @@ func incrementIPv6(ip net.IP) {
 }
 
 func GetIPPoolSettings(c *gin.Context) {
+	nodeID := parseNodeIDQuery(c)
 	var settings models.IPPoolSettings
-	result := db.DB.First(&settings)
+	result := db.DB.Where("node_id = ?", nodeID).First(&settings)
 	if result.Error != nil {
 		settings = models.IPPoolSettings{
+			NodeID:       nodeID,
 			RandomAssign: false,
 			AutoAssign:   false,
 		}
@@ -693,10 +718,12 @@ func UpdateIPPoolSettings(c *gin.Context) {
 		return
 	}
 
+	nodeID := parseNodeIDQuery(c)
 	var settings models.IPPoolSettings
-	result := db.DB.First(&settings)
+	result := db.DB.Where("node_id = ?", nodeID).First(&settings)
 	if result.Error != nil {
 		settings = models.IPPoolSettings{
+			NodeID:                    nodeID,
 			RandomAssign:              req.RandomAssign,
 			AutoAssign:                req.AutoAssign,
 			AllowUserReleaseIPv4:      req.AllowUserReleaseIPv4,

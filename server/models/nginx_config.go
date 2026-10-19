@@ -19,6 +19,7 @@ type NginxConfig struct {
 // ReverseProxy 反向代理规则
 type ReverseProxy struct {
 	ID            uint      `gorm:"primaryKey" json:"id"`
+	NodeID        uint      `gorm:"index" json:"node_id"` // 所属节点，0=全局/未分配
 	ContainerName string    `gorm:"index;size:255;not null" json:"container_name"`
 	Protocol      string    `gorm:"size:10;not null" json:"protocol"` // http 或 https
 	Domain        string    `gorm:"uniqueIndex;size:255;not null" json:"domain"`

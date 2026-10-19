@@ -4,6 +4,7 @@ import "gorm.io/gorm"
 
 type Template struct {
 	gorm.Model
+	NodeID       uint   `gorm:"index" json:"node_id"` // 所属节点，0=全局/未分配
 	Fingerprint  string `gorm:"uniqueIndex;size:255"`
 	Alias        string `gorm:"index;size:255"`
 	Architecture string `gorm:"size:50"`
@@ -18,6 +19,7 @@ type Template struct {
 }
 
 type TemplateListResponse struct {
+	NodeID       uint   `json:"node_id"`
 	Fingerprint  string `json:"fingerprint"`
 	Alias        string `json:"alias"`
 	Architecture string `json:"architecture"`

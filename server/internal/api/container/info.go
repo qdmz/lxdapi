@@ -69,7 +69,7 @@ func GetInfo(c *gin.Context) {
 func GetTemplateList(c *gin.Context) {
 	svc := service.NewTemplateService()
 
-	templates, err := svc.List()
+	templates, err := svc.List(0)
 	if err != nil {
 		logger.Error("获取模板列表失败: %v", err)
 		response.Error(c, 500, "获取模板列表失败: "+err.Error())

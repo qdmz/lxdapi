@@ -9,6 +9,8 @@ import (
 type FirewallConfig struct {
 	gorm.Model
 
+	NodeID uint `gorm:"index" json:"node_id"` // 所属节点，0=全局/未分配
+
 	Rules string `json:"rules" gorm:"type:text"`
 
 	Enabled     bool       `json:"enabled" gorm:"default:false"`

@@ -4,6 +4,7 @@ import "time"
 
 type NATConfigV4 struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
+	NodeID    uint      `gorm:"index" json:"node_id"` // 所属节点，0=全局/未分配
 	Interface string    `gorm:"size:50;not null" json:"interface"`
 	IP        string    `gorm:"size:50;not null" json:"ip"`
 	DisplayIP string    `gorm:"size:200;not null;default:''" json:"display_ip"`
@@ -14,6 +15,7 @@ type NATConfigV4 struct {
 
 type NATConfigV6 struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
+	NodeID    uint      `gorm:"index" json:"node_id"` // 所属节点，0=全局/未分配
 	Interface string    `gorm:"size:50;not null" json:"interface"`
 	IP        string    `gorm:"size:50;not null" json:"ip"`
 	DisplayIP string    `gorm:"size:200;not null;default:''" json:"display_ip"`

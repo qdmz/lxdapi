@@ -610,6 +610,12 @@ func main() {
 		adminAPI.DELETE("/nodes/:id", admin.DeleteNode)
 		adminAPI.POST("/nodes/:id/test", admin.TestNode)
 		adminAPI.GET("/nodes/:id/images", admin.GetNodeImages)
+		// 优惠券管理
+		adminAPI.GET("/coupons", admin.ListCoupons)
+		adminAPI.POST("/coupons", admin.CreateCoupon)
+		adminAPI.PUT("/coupons/:id", admin.UpdateCoupon)
+		adminAPI.DELETE("/coupons/:id", admin.DeleteCoupon)
+		adminAPI.GET("/coupons/:id/stats", admin.CouponStats)
 		adminAPI.GET("/regions", admin.ListRegions)
 		adminAPI.POST("/regions", admin.CreateRegion)
 		adminAPI.PUT("/regions/:id", admin.UpdateRegion)
@@ -670,6 +676,10 @@ func main() {
 		userAPI.POST("/tickets/:id/close", notification.CloseTicket)
 		userAPI.POST("/tickets/:id/messages", notification.AddTicketMessage)
 		userAPI.GET("/tickets/:id/messages", notification.GetTicketMessages)
+		// 优惠券
+		userAPI.GET("/coupons", user.MyCoupons)
+		userAPI.POST("/coupons/claim", user.ClaimCoupon)
+		userAPI.GET("/coupons/available", user.AvailableCoupons)
 		userAPI.GET("/notifications", notification.GetNotifications)
 		userAPI.GET("/notifications/unread", notification.GetUnreadCount)
 		userAPI.POST("/notifications/:id/read", notification.MarkAsRead)

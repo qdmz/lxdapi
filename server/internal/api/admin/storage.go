@@ -14,8 +14,9 @@ import (
 // @Success 200 {object} response.Response
 // @Router /api/admin/storage-pools [get]
 func GetStoragePools(c *gin.Context) {
+	nodeID := parseNodeIDQuery(c)
 	svc := service.NewStorageService()
-	pools, err := svc.List()
+	pools, err := svc.List(nodeID)
 	if err != nil {
 		response.Error(c, 500, "获取存储池列表失败")
 		return
@@ -23,6 +24,7 @@ func GetStoragePools(c *gin.Context) {
 
 	type poolResponse struct {
 		ID          uint   `json:"id"`
+		NodeID      uint   `json:"node_id"`
 		Name        string `json:"name"`
 		Driver      string `json:"driver"`
 		Description string `json:"description"`
@@ -42,6 +44,7 @@ func GetStoragePools(c *gin.Context) {
 		}
 		result[i] = poolResponse{
 			ID:          p.ID,
+			NodeID:      p.NodeID,
 			Name:        p.Name,
 			Driver:      p.Driver,
 			Description: p.Description,
@@ -63,8 +66,9 @@ func GetStoragePools(c *gin.Context) {
 // @Success 200 {object} response.Response
 // @Router /api/admin/storage-pools/sync [post]
 func SyncStoragePools(c *gin.Context) {
+	nodeID := parseNodeIDQuery(c)
 	svc := service.NewStorageService()
-	added, updated, deleted, err := svc.SyncFromLXD(c.Request.Context())
+	added, updated, deleted, err := svc.SyncFromLXD(c.Request.Context(), nodeID)
 	if err != nil {
 		logger.Error("同步存储池失败: %v", err)
 		response.Error(c, 500, "同步失败: "+err.Error())
@@ -121,4 +125,13 @@ func formatBytes(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// parseNodeIDQuery 解析 ?node_id= 查询参数，0 表示不过滤（全局/未分配）
+func parseNodeIDQuery(c *gin.Context) uint {
+	var nodeID uint
+	if v := c.Query("node_id"); v != "" {
+		fmt.Sscanf(v, "%d", &nodeID)
+	}
+	return nodeID
 }

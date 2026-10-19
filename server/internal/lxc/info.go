@@ -73,3 +73,10 @@ func (c *Client) ListAllContainers(ctx context.Context) ([]string, error) {
 
 	return names, nil
 }
+
+// Info 获取 LXD 服务器信息，用于节点连通性测试。
+// 连接失败（含认证失败）时返回错误。
+func (c *Client) Info(ctx context.Context) error {
+	_, err := c.exec(ctx, "info")
+	return err
+}

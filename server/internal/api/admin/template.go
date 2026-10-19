@@ -22,8 +22,9 @@ import (
 // @Router /api/admin/templates [get]
 func GetTemplateList(c *gin.Context) {
 	svc := service.NewTemplateService()
-	
-	templates, err := svc.List()
+	nodeID := parseNodeIDQuery(c)
+
+	templates, err := svc.List(nodeID)
 	if err != nil {
 		logger.Error("获取模板列表失败: %v", err)
 		response.Error(c, 500, "获取模板列表失败: "+err.Error())
@@ -51,8 +52,9 @@ func SyncTemplates(c *gin.Context) {
 	ctx := c.Request.Context()
 	
 	logger.Info("开始同步模板")
-	
-	added, updated, deleted, err := svc.SyncFromLXD(ctx)
+
+	nodeID := parseNodeIDQuery(c)
+	added, updated, deleted, err := svc.SyncFromLXD(ctx, nodeID)
 	if err != nil {
 		logger.Error("同步模板失败: %v", err)
 		response.Error(c, 500, "同步模板失败: "+err.Error())

@@ -19,15 +19,20 @@ func NewTemplateService() *TemplateService {
 	}
 }
 
-func (s *TemplateService) List() ([]models.TemplateListResponse, error) {
+func (s *TemplateService) List(nodeID uint) ([]models.TemplateListResponse, error) {
 	var templates []models.Template
-	if err := db.DB.Order("created_at DESC").Find(&templates).Error; err != nil {
+	query := db.DB.Order("created_at DESC")
+	if nodeID > 0 {
+		query = query.Where("node_id = ?", nodeID)
+	}
+	if err := query.Find(&templates).Error; err != nil {
 		return nil, err
 	}
-	
+
 	result := make([]models.TemplateListResponse, len(templates))
 	for i, t := range templates {
 		result[i] = models.TemplateListResponse{
+			NodeID:       t.NodeID,
 			Fingerprint:  t.Fingerprint,
 			Alias:        t.Alias,
 			Architecture: t.Architecture,
@@ -46,7 +51,7 @@ func (s *TemplateService) List() ([]models.TemplateListResponse, error) {
 	return result, nil
 }
 
-func (s *TemplateService) SyncFromLXD(ctx context.Context) (int, int, int, error) {
+func (s *TemplateService) SyncFromLXD(ctx context.Context, nodeID uint) (int, int, int, error) {
 	logger.Info("开始从LXD同步镜像模板")
 	
 	images, err := s.lxcClient.ListImages(ctx)
@@ -84,9 +89,10 @@ func (s *TemplateService) SyncFromLXD(ctx context.Context) (int, int, int, error
 		}
 		
 		var existing models.Template
-		err := db.DB.Where("fingerprint = ?", img.Fingerprint).First(&existing).Error
+		err := db.DB.Where("fingerprint = ? AND node_id = ?", img.Fingerprint, nodeID).First(&existing).Error
 		
 		template := models.Template{
+			NodeID:       nodeID,
 			Fingerprint:  img.Fingerprint,
 			Alias:        alias,
 			Architecture: img.Architecture,
@@ -118,7 +124,7 @@ func (s *TemplateService) SyncFromLXD(ctx context.Context) (int, int, int, error
 	}
 	
 	var dbTemplates []models.Template
-	db.DB.Find(&dbTemplates)
+	db.DB.Where("node_id = ?", nodeID).Find(&dbTemplates)
 	
 	deleted := 0
 	for _, dbTpl := range dbTemplates {

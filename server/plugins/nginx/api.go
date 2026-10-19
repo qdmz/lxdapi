@@ -250,6 +250,12 @@ func (h *APIHandler) GetProxies(c *gin.Context) {
 	var proxies []models.ReverseProxy
 	query := db.DB.Model(&models.ReverseProxy{})
 	
+	if v := c.Query("node_id"); v != "" {
+		var nodeID uint
+		fmt.Sscanf(v, "%d", &nodeID)
+		query = query.Where("node_id = ?", nodeID)
+	}
+	
 	if containerName := c.Query("container_name"); containerName != "" {
 		query = query.Where("container_name = ?", containerName)
 	}

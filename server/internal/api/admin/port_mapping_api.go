@@ -420,17 +420,26 @@ func GetNATConfig(c *gin.Context) {
 		response.Error(c, 400, "version参数必须是v4或v6")
 		return
 	}
+	nodeID := parseNodeIDQuery(c)
 
 	if version == "v4" {
 		var configs []models.NATConfigV4
-		db.DB.Find(&configs)
+		query := db.DB.Model(&models.NATConfigV4{})
+		if nodeID > 0 {
+			query = query.Where("node_id = ?", nodeID)
+		}
+		query.Find(&configs)
 		response.Success(c, gin.H{
 			"configs": configs,
 			"total":   len(configs),
 		})
 	} else {
 		var configs []models.NATConfigV6
-		db.DB.Find(&configs)
+		query := db.DB.Model(&models.NATConfigV6{})
+		if nodeID > 0 {
+			query = query.Where("node_id = ?", nodeID)
+		}
+		query.Find(&configs)
 		response.Success(c, gin.H{
 			"configs": configs,
 			"total":   len(configs),
@@ -463,6 +472,7 @@ func SaveNATConfig(c *gin.Context) {
 		DisplayIP string `json:"display_ip"`
 		Interface string `json:"interface"`
 		Protocol  string `json:"protocol"`
+		NodeID    uint   `json:"node_id"`
 	}
 
 	var configs []NATConfigItem
@@ -470,9 +480,17 @@ func SaveNATConfig(c *gin.Context) {
 		response.Error(c, 400, "参数错误: "+err.Error())
 		return
 	}
+	nodeID := parseNodeIDQuery(c)
+	// body 里单条指定的 node_id 优先于 query 参数
+	resolveNodeID := func(itemNodeID uint) uint {
+		if itemNodeID > 0 {
+			return itemNodeID
+		}
+		return nodeID
+	}
 
 	if version == "v4" {
-		db.DB.Unscoped().Where("1 = 1").Delete(&models.NATConfigV4{})
+		db.DB.Unscoped().Where("node_id = ?", nodeID).Delete(&models.NATConfigV4{})
 
 		for _, config := range configs {
 			displayIP := config.DisplayIP
@@ -480,6 +498,7 @@ func SaveNATConfig(c *gin.Context) {
 				displayIP = config.IP
 			}
 			natConfig := models.NATConfigV4{
+				NodeID:    resolveNodeID(config.NodeID),
 				IP:        config.IP,
 				DisplayIP: displayIP,
 				Interface: config.Interface,
@@ -498,7 +517,7 @@ func SaveNATConfig(c *gin.Context) {
 			"message": "配置保存成功",
 		})
 	} else {
-		db.DB.Unscoped().Where("1 = 1").Delete(&models.NATConfigV6{})
+		db.DB.Unscoped().Where("node_id = ?", nodeID).Delete(&models.NATConfigV6{})
 
 		for _, config := range configs {
 			displayIP := config.DisplayIP
@@ -506,6 +525,7 @@ func SaveNATConfig(c *gin.Context) {
 				displayIP = config.IP
 			}
 			natConfig := models.NATConfigV6{
+				NodeID:    resolveNodeID(config.NodeID),
 				IP:        config.IP,
 				DisplayIP: displayIP,
 				Interface: config.Interface,

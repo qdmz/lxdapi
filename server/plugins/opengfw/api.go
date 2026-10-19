@@ -21,12 +21,26 @@ func NewAPIHandlerV2(plugin *OpenGFWPlugin) *APIHandlerV2 {
 }
 
 func (h *APIHandlerV2) GetConfig(c *gin.Context) {
+	nodeID := parseNodeIDQuery(c)
 	var config models.FirewallConfig
-	if err := db.DB.First(&config).Error; err != nil {
-		response.Error(c, 500, "获取配置失败: "+err.Error())
-		return
+	if err := db.DB.Where("node_id = ?", nodeID).First(&config).Error; err != nil {
+		// 该节点尚无配置时自动创建一条（向后兼容旧的全局配置）
+		config = models.FirewallConfig{NodeID: nodeID}
+		if err := db.DB.Create(&config).Error; err != nil {
+			response.Error(c, 500, "获取配置失败: "+err.Error())
+			return
+		}
 	}
 	response.Success(c, config)
+}
+
+// parseNodeIDQuery 解析 ?node_id= 查询参数，0 表示全局/未分配
+func parseNodeIDQuery(c *gin.Context) uint {
+	var nodeID uint
+	if v := c.Query("node_id"); v != "" {
+		fmt.Sscanf(v, "%d", &nodeID)
+	}
+	return nodeID
 }
 
 func (h *APIHandlerV2) UpdateConfig(c *gin.Context) {
@@ -39,10 +53,14 @@ func (h *APIHandlerV2) UpdateConfig(c *gin.Context) {
 		return
 	}
 
+	nodeID := parseNodeIDQuery(c)
 	var config models.FirewallConfig
-	if err := db.DB.First(&config).Error; err != nil {
-		response.Error(c, 404, "配置不存在")
-		return
+	if err := db.DB.Where("node_id = ?", nodeID).First(&config).Error; err != nil {
+		config = models.FirewallConfig{NodeID: nodeID}
+		if err := db.DB.Create(&config).Error; err != nil {
+			response.Error(c, 500, "保存配置失败: "+err.Error())
+			return
+		}
 	}
 
 	config.Rules = req.Rules

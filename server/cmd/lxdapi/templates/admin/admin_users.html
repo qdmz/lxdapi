@@ -505,6 +505,7 @@
                             <div class="flex gap-1">
                                 <a href="/admin/users/${user.ID}" class="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded transition">详情</a>
                                 <button onclick="showEditModal(${user.ID})" class="px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded transition">编辑</button>
+                                <button onclick="impersonateUser(${user.ID}, '${user.Username}')" class="px-2 py-1 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded transition">模拟登录</button>
                                 <button onclick="deleteUser(${user.ID}, '${user.Username}')" class="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition">删除</button>
                             </div>
                         </td>
@@ -839,6 +840,22 @@
                     }
                     showToast('error', errorMsg);
                 }
+            });
+        }
+
+        function impersonateUser(userId, username) {
+            if (!confirm(`确定要以用户"${username}"的身份登录用户中心吗？`)) return;
+            $.ajax({
+                url: `/api/admin/users/${userId}/impersonate`,
+                type: 'POST',
+                success: function(result) {
+                    if (result.code === 200) {
+                        window.open('/user/index.html', '_blank');
+                    } else {
+                        alert(result.msg || '模拟登录失败');
+                    }
+                },
+                error: function() { alert('请求失败'); }
             });
         }
 

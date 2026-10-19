@@ -18,10 +18,10 @@ import (
 
 func round2(v float64) float64 { return math.Round(v*100) / 100 }
 
-// refundOrderToBalance 已支付订单退款到余额并把订单置为 refunded；0 元订单不处理。
+// RefundOrderToBalance 已支付订单退款到余额并把订单置为 refunded；0 元订单不处理。
 // 订单状态翻转、余额到账、退款流水写入在同一个 DB 事务里完成：任何一步失败整体回滚，
 // 不存在"订单已标退款但余额没到账"的 crash 中间态；以订单状态条件更新 + 退款流水去重保证幂等。
-func refundOrderToBalance(o *models.Order, remark string) (float64, error) {
+func RefundOrderToBalance(o *models.Order, remark string) (float64, error) {
 	amt := round2(o.Amount)
 	if amt <= 0 {
 		return 0, nil // 0 元订单无需退款
@@ -93,7 +93,7 @@ func ProvisionOrder(orderID uint) error {
 		db.DB.Save(&order)
 		logger.Error("订单 %s 自动开通失败: %v", order.OrderNo, err)
 		// 开通失败自动退款到余额（事务+幂等）
-		if _, rerr := refundOrderToBalance(&order, fmt.Sprintf("实例开通失败退款 %s", order.OrderNo)); rerr != nil {
+		if _, rerr := RefundOrderToBalance(&order, fmt.Sprintf("实例开通失败退款 %s", order.OrderNo)); rerr != nil {
 			logger.Error("订单 %s 退款失败: %v", order.OrderNo, rerr)
 		}
 		notifyOrder(&order, "开通失败", "您的订单 "+order.OrderNo+" 已完成支付，但服务器开通失败："+err.Error()+"，已自动退款到余额，请联系客服处理。")

@@ -83,6 +83,7 @@ func Init() error {
 		&models.TicketMessage{},
 		&models.Notification{},
 		&models.BalanceLog{},
+		&models.KnowledgeArticle{},
 	)
 	if err != nil {
 		return err

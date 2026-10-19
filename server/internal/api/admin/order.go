@@ -108,3 +108,18 @@ func CloseOrder(c *gin.Context) {
 	db.DB.Save(&order)
 	response.Success(c, order)
 }
+
+// RefundOrder 后台手动退款到余额
+func RefundOrder(c *gin.Context) {
+	var order models.Order
+	if err := db.DB.First(&order, c.Param("id")).Error; err != nil {
+		response.Error(c, 404, "订单不存在")
+		return
+	}
+	after, err := service.RefundOrderToBalance(&order, "后台手动退款")
+	if err != nil {
+		response.Error(c, 500, "退款失败: "+err.Error())
+		return
+	}
+	response.Success(c, gin.H{"refunded": after > 0, "balance": after})
+}

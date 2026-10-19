@@ -56,8 +56,10 @@ system:
 
 # LXC配置
 lxc:
+  # LXD CLI 客户端（lxd-client 包提供）
+  bin: "lxc"
   # LXD Socket路径
-  socket: "/var/snap/lxd/common/lxd/unix.socket"
+  socket: "/var/lib/lxd/unix.socket"
   # 命令超时(秒)
   timeout: 300
   # 默认存储池

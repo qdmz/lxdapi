@@ -28,6 +28,7 @@ func GetCaptcha(c *gin.Context) {
 	}
 	session := sessions.Default(c)
 	session.Set("public_captcha_id", id)
+	session.Set("user_captcha_id", id) // 兼容登录页使用公开验证码接口
 	session.Save()
 	c.JSON(200, gin.H{
 		"code":       200,

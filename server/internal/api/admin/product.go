@@ -59,6 +59,10 @@ func UpdateProduct(c *gin.Context) {
 	product.Description = input.Description
 	product.Category = input.Category
 	product.Status = input.Status
+	product.NodeID = input.NodeID
+	product.Image = input.Image
+	product.Stock = input.Stock
+	product.Sort = input.Sort
 	product.CPU = input.CPU
 	product.Memory = input.Memory
 	product.Disk = input.Disk

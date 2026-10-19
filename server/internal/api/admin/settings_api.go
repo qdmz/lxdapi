@@ -2,22 +2,104 @@ package admin
 
 import (
 	"github.com/gin-gonic/gin"
+	"lxdapi/internal/db"
+	"lxdapi/internal/settings"
+	"lxdapi/models"
 	"lxdapi/pkg/mail"
 	"lxdapi/pkg/response"
 )
+
+// GetGeneralSettings 获取通用开关（注册 / 验证码 / 邮件通知）
+func GetGeneralSettings(c *gin.Context) {
+	response.Success(c, gin.H{
+		"register_enabled": settings.RegisterEnabled(),
+		"captcha_enabled":  settings.CaptchaEnabled(),
+		"email_notify":     settings.EmailNotifyEnabled(),
+	})
+}
+
+// SaveGeneralSettings 保存通用开关
+func SaveGeneralSettings(c *gin.Context) {
+	var req struct {
+		RegisterEnabled *bool `json:"register_enabled"`
+		CaptchaEnabled  *bool `json:"captcha_enabled"`
+		EmailNotify     *bool `json:"email_notify"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "参数错误: "+err.Error())
+		return
+	}
+	if req.RegisterEnabled != nil {
+		_ = settings.Set("register_enabled", boolStr(*req.RegisterEnabled), "general")
+	}
+	if req.CaptchaEnabled != nil {
+		_ = settings.Set("captcha_enabled", boolStr(*req.CaptchaEnabled), "general")
+	}
+	if req.EmailNotify != nil {
+		_ = settings.Set("email_notify_enabled", boolStr(*req.EmailNotify), "general")
+	}
+	response.Success(c, gin.H{
+		"register_enabled": settings.RegisterEnabled(),
+		"captcha_enabled":  settings.CaptchaEnabled(),
+		"email_notify":     settings.EmailNotifyEnabled(),
+	})
+}
+
+// SendBroadcast 管理员向全体用户发送广播（站内通知 + 可选邮件）
+func SendBroadcast(c *gin.Context) {
+	var req struct {
+		Title    string `json:"title" binding:"required"`
+		Content  string `json:"content" binding:"required"`
+		SendMail bool   `json:"send_mail"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "参数错误: "+err.Error())
+		return
+	}
+
+	var users []models.User
+	db.DB.Select("id, email").Find(&users)
+
+	broadcast := req.Title
+	for _, u := range users {
+		db.DB.Create(&models.Notification{
+			UserID:      u.ID,
+			Type:        "promotion",
+			Title:       broadcast,
+			Content:     req.Content,
+			IsRead:      false,
+			RelatedType: "broadcast",
+		})
+		if req.SendMail && u.Email != "" && settings.EmailNotifyEnabled() {
+			_ = mail.Send(u.Email, "【LXD 容器面板】"+broadcast, `<div style="font-family:sans-serif;line-height:1.8"><h3>`+broadcast+`</h3><p>`+req.Content+`</p></div>`)
+		}
+	}
+
+	response.Success(c, gin.H{"sent": len(users)})
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
 
 // GetSMTPSettings 获取 SMTP 配置与邮件模板
 func GetSMTPSettings(c *gin.Context) {
 	cfg := mail.GetConfig()
 	as, ab := mail.GetTemplate("mail_activate", "", "")
 	rs, rb := mail.GetTemplate("mail_reset", "", "")
+	os, ob := mail.GetTemplate("mail_order_paid", "", "")
 	response.Success(c, gin.H{
 		"smtp": cfg,
 		"templates": gin.H{
-			"activate_subject": as,
-			"activate_body":    ab,
-			"reset_subject":    rs,
-			"reset_body":       rb,
+			"activate_subject":   as,
+			"activate_body":      ab,
+			"reset_subject":      rs,
+			"reset_body":         rb,
+			"order_subject":      os,
+			"order_body":         ob,
 		},
 	})
 }
@@ -36,6 +118,8 @@ func SaveSMTPSettings(c *gin.Context) {
 		ActivateBody    string `json:"activate_body"`
 		ResetSubject    string `json:"reset_subject"`
 		ResetBody       string `json:"reset_body"`
+		OrderSubject    string `json:"order_subject"`
+		OrderBody       string `json:"order_body"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, 400, "参数错误: "+err.Error())
@@ -60,6 +144,9 @@ func SaveSMTPSettings(c *gin.Context) {
 	}
 	if req.ResetSubject != "" || req.ResetBody != "" {
 		_ = mail.SaveTemplate("mail_reset", req.ResetSubject, req.ResetBody)
+	}
+	if req.OrderSubject != "" || req.OrderBody != "" {
+		_ = mail.SaveTemplate("mail_order_paid", req.OrderSubject, req.OrderBody)
 	}
 
 	response.Success(c, gin.H{"msg": "已保存"})

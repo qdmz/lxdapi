@@ -5,9 +5,11 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"lxdapi/internal/db"
+	"lxdapi/internal/settings"
 	"lxdapi/models"
 	"lxdapi/pkg/logger"
 	"lxdapi/pkg/mail"
@@ -36,14 +38,38 @@ func siteName() string {
 
 // Register 用户注册（注册后需邮箱激活）
 func Register(c *gin.Context) {
+	if !settings.RegisterEnabled() {
+		response.Error(c, 403, "系统暂未开放注册")
+		return
+	}
+
 	var req struct {
 		Username string `json:"username" binding:"required,min=3,max=32"`
 		Email    string `json:"email" binding:"required,email"`
 		Password string `json:"password" binding:"required,min=6,max=64"`
+		Captcha  string `json:"captcha"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, 400, "参数错误：用户名 3-32 位、邮箱格式正确、密码至少 6 位")
 		return
+	}
+
+	// 注册页启用验证码时校验图形验证码
+	if settings.CaptchaEnabled() {
+		if req.Captcha == "" {
+			response.Error(c, 400, "请填写图形验证码")
+			return
+		}
+		session := sessions.Default(c)
+		captchaID := session.Get("user_captcha_id")
+		if captchaID == nil {
+			response.Error(c, 400, "验证码已过期，请刷新")
+			return
+		}
+		if !captchaStore.Verify(captchaID.(string), req.Captcha, true) {
+			response.Error(c, 400, "验证码错误")
+			return
+		}
 	}
 
 	var exists models.User
@@ -78,6 +104,20 @@ func Register(c *gin.Context) {
 	}
 	if err := db.DB.Create(&u).Error; err != nil {
 		response.Error(c, 500, "创建用户失败: "+err.Error())
+		return
+	}
+
+	// 未启用邮件通知时，注册后直接激活账号，无需邮箱验证
+	if !settings.EmailNotifyEnabled() {
+		u.EmailVerified = true
+		u.Status = "active"
+		u.ActivateToken = ""
+		if err := db.DB.Save(&u).Error; err != nil {
+			response.Error(c, 500, "激活用户失败: "+err.Error())
+			return
+		}
+		logger.OK("新用户注册（邮件通知关闭，直接激活）: %s (%s)", u.Username, u.Email)
+		response.Success(c, gin.H{"registered": true, "mail_sent": false, "msg": "注册成功，可直接登录"})
 		return
 	}
 
@@ -121,12 +161,33 @@ func Activate(c *gin.Context) {
 
 // ForgotPassword 忘记密码：发送重置邮件
 func ForgotPassword(c *gin.Context) {
+	if !settings.EmailNotifyEnabled() {
+		response.Error(c, 400, "系统未启用邮件通知，无法找回密码，请联系管理员")
+		return
+	}
 	var req struct {
-		Email string `json:"email" binding:"required,email"`
+		Email   string `json:"email" binding:"required,email"`
+		Captcha string `json:"captcha"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, 400, "请填写正确的邮箱")
 		return
+	}
+	if settings.CaptchaEnabled() {
+		if req.Captcha == "" {
+			response.Error(c, 400, "请填写图形验证码")
+			return
+		}
+		session := sessions.Default(c)
+		captchaID := session.Get("user_captcha_id")
+		if captchaID == nil {
+			response.Error(c, 400, "验证码已过期，请刷新")
+			return
+		}
+		if !captchaStore.Verify(captchaID.(string), req.Captcha, true) {
+			response.Error(c, 400, "验证码错误")
+			return
+		}
 	}
 
 	// 无论用户是否存在都返回成功，避免邮箱探测
@@ -162,10 +223,27 @@ func ResetPassword(c *gin.Context) {
 	var req struct {
 		Token    string `json:"token" binding:"required"`
 		Password string `json:"password" binding:"required,min=6,max=64"`
+		Captcha  string `json:"captcha"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, 400, "参数错误：token 必填，密码至少 6 位")
 		return
+	}
+	if settings.CaptchaEnabled() {
+		if req.Captcha == "" {
+			response.Error(c, 400, "请填写图形验证码")
+			return
+		}
+		session := sessions.Default(c)
+		captchaID := session.Get("user_captcha_id")
+		if captchaID == nil {
+			response.Error(c, 400, "验证码已过期，请刷新")
+			return
+		}
+		if !captchaStore.Verify(captchaID.(string), req.Captcha, true) {
+			response.Error(c, 400, "验证码错误")
+			return
+		}
 	}
 
 	var u models.User

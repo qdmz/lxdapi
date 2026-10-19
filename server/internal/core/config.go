@@ -6,12 +6,12 @@ import (
 )
 
 type Config struct {
-	System   SystemConfig   `yaml:"system"`
-	LXC      LXCConfig      `yaml:"lxc"`
-	Traffic  TrafficConfig  `yaml:"traffic"`
-	Task     TaskConfig     `yaml:"task"`
-	Admin    AdminConfig    `yaml:"admin"`
-	Plugins  PluginsConfig  `yaml:"plugins"`
+	System  SystemConfig  `yaml:"system"`
+	LXC     LXCConfig     `yaml:"lxc"`
+	Traffic TrafficConfig `yaml:"traffic"`
+	Task    TaskConfig    `yaml:"task"`
+	Admin   AdminConfig   `yaml:"admin"`
+	Plugins PluginsConfig `yaml:"plugins"`
 }
 
 type SystemConfig struct {
@@ -45,6 +45,7 @@ type LoggerConfig struct {
 }
 
 type LXCConfig struct {
+	Bin            string `yaml:"bin"` // LXC 可执行文件名称，默认 "lxc"（兼容 LXD 统一 CLI 环境）
 	Socket         string `yaml:"socket"`
 	Timeout        int    `yaml:"timeout"`
 	DefaultStorage string `yaml:"default_storage"`
@@ -74,7 +75,7 @@ type RedisConfig struct {
 }
 
 type DatabaseConfig struct {
-	Type     string `yaml:"type"`
+	Type     string         `yaml:"type"`
 	SQLite   SQLiteConfig   `yaml:"sqlite"`
 	MySQL    MySQLConfig    `yaml:"mysql"`
 	Postgres PostgresConfig `yaml:"postgres"`
@@ -126,4 +127,3 @@ func LoadConfig(path string) error {
 	GlobalConfig = &Config{}
 	return yaml.Unmarshal(data, GlobalConfig)
 }
-

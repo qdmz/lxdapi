@@ -145,7 +145,7 @@ func (q *RedisQueue) worker(id int) {
 
 func (q *RedisQueue) executeTask(redisTask *RedisTask) {
 	now := time.Now()
-	
+
 	var dbTask models.Task
 	if err := db.DB.First(&dbTask, redisTask.ID).Error; err != nil {
 		logger.Error("读取任务详情失败 (ID: %d): %v", redisTask.ID, err)
@@ -155,7 +155,7 @@ func (q *RedisQueue) executeTask(redisTask *RedisTask) {
 		})
 		return
 	}
-	
+
 	var logs []string
 	logs = append(logs, fmt.Sprintf("[%s] 任务开始执行", now.Format("2006-01-02 15:04:05")))
 	logs = append(logs, fmt.Sprintf("容器: %s, 操作: %s", redisTask.ContainerName, redisTask.Action))
@@ -180,10 +180,10 @@ func (q *RedisQueue) executeTask(redisTask *RedisTask) {
 
 	completed := time.Now()
 	duration := completed.Sub(now).Milliseconds()
-	
+
 	logs = append(logs, fmt.Sprintf("[%s] 任务执行完成", completed.Format("2006-01-02 15:04:05")))
 	logs = append(logs, fmt.Sprintf("耗时: %dms", duration))
-	
+
 	if err != nil {
 		logs = append(logs, fmt.Sprintf("执行失败: %v", err))
 		db.DB.Model(&models.Task{}).Where("id = ?", redisTask.ID).Updates(map[string]interface{}{
@@ -209,7 +209,11 @@ func (q *RedisQueue) executeTask(redisTask *RedisTask) {
 
 var taskExecutors = make(map[string]func(context.Context, string, string) error)
 
+// GetTaskExecutor 按 action 获取已注册的任务执行器
+func GetTaskExecutor(action string) func(context.Context, string, string) error {
+	return taskExecutors[action]
+}
+
 func RegisterTaskExecutor(action string, executor func(context.Context, string, string) error) {
 	taskExecutors[action] = executor
 }
-

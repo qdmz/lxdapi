@@ -42,20 +42,20 @@ func InitQueue() error {
 		logger.Info("异步任务队列未启用")
 		return nil
 	}
-	
+
 	if cfg.Backend == "redis" {
 		return InitRedisQueue()
 	}
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	GlobalQueue = &Queue{
 		tasks:   make(chan *Task, cfg.QueueSize),
 		workers: cfg.Workers,
 		ctx:     ctx,
 		cancel:  cancel,
 	}
-	
+
 	GlobalQueue.Start()
 	logger.OK("异步任务队列初始化成功，Worker数: %d", cfg.Workers)
 	return nil
@@ -85,7 +85,7 @@ func (q *Queue) Submit(task *Task) error {
 		}
 		return task.Func(context.Background())
 	}
-	
+
 	select {
 	case q.tasks <- task:
 		logger.Info("任务已提交: %s - %s", task.ContainerName, task.Action)
@@ -98,9 +98,9 @@ func (q *Queue) Submit(task *Task) error {
 
 func (q *Queue) worker(id int) {
 	defer q.wg.Done()
-	
+
 	logger.Info("Worker %d 已启动", id)
-	
+
 	for {
 		select {
 		case <-q.ctx.Done():
@@ -116,30 +116,30 @@ func (q *Queue) worker(id int) {
 
 func (q *Queue) executeTask(task *Task) {
 	now := time.Now()
-	
+
 	var logs []string
 	logs = append(logs, fmt.Sprintf("[%s] 任务开始执行", now.Format("2006-01-02 15:04:05")))
 	logs = append(logs, fmt.Sprintf("容器: %s, 操作: %s", task.ContainerName, task.Action))
-	
+
 	db.DB.Model(&models.Task{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
 		"status":     models.TaskRunning,
 		"started_at": &now,
 		"logs":       strings.Join(logs, "\n"),
 	})
-	
+
 	timeout := time.Duration(core.GlobalConfig.Task.Timeout) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	ctx = context.WithValue(ctx, taskIDKey{}, task.ID)
 	defer cancel()
-	
+
 	err := task.Func(ctx)
-	
+
 	completed := time.Now()
 	duration := completed.Sub(now).Milliseconds()
-	
+
 	logs = append(logs, fmt.Sprintf("[%s] 任务执行完成", completed.Format("2006-01-02 15:04:05")))
 	logs = append(logs, fmt.Sprintf("耗时: %dms", duration))
-	
+
 	if err != nil {
 		logs = append(logs, fmt.Sprintf("执行失败: %v", err))
 		db.DB.Model(&models.Task{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
@@ -169,18 +169,18 @@ func CreateTask(containerName, action, userID string, params map[string]interfac
 		db.DB.Model(&models.Task{}).
 			Where("container_name = ? AND status IN ?", containerName, []string{models.TaskQueued, models.TaskRunning}).
 			Count(&count)
-		
+
 		if count > 0 {
 			return nil, fmt.Errorf("容器正在执行任务，请稍后再试")
 		}
 	}
-	
+
 	var paramsJSON string
 	if params != nil {
 		data, _ := json.Marshal(params)
 		paramsJSON = string(data)
 	}
-	
+
 	task := &models.Task{
 		ContainerName: containerName,
 		Action:        action,
@@ -189,11 +189,11 @@ func CreateTask(containerName, action, userID string, params map[string]interfac
 		Status:        models.TaskQueued,
 		Params:        paramsJSON,
 	}
-	
+
 	if err := db.DB.Create(task).Error; err != nil {
 		return nil, err
 	}
-	
+
 	queueTask := &Task{
 		ID:            task.ID,
 		ContainerName: containerName,
@@ -202,11 +202,22 @@ func CreateTask(containerName, action, userID string, params map[string]interfac
 		Params:        params,
 		Func:          fn,
 	}
-	
+
+	// 未提供执行函数时，使用已注册的 action 执行器（Redis 后端也走同一注册表）
+	if queueTask.Func == nil {
+		executor := GetTaskExecutor(action)
+		if executor == nil {
+			return nil, fmt.Errorf("未注册任务执行器: %s", action)
+		}
+		queueTask.Func = func(ctx context.Context) error {
+			return executor(ctx, containerName, paramsJSON)
+		}
+	}
+
 	if err := GlobalQueue.Submit(queueTask); err != nil {
 		return nil, err
 	}
-	
+
 	return task, nil
 }
 
@@ -215,13 +226,13 @@ func CreateSyncTask(containerName, action, userID string, fn TaskFunc) error {
 	db.DB.Model(&models.Task{}).
 		Where("container_name = ? AND status IN ?", containerName, []string{models.TaskQueued, models.TaskRunning}).
 		Count(&count)
-	
+
 	if count > 0 {
 		return fmt.Errorf("容器正在执行任务，请稍后再试")
 	}
-	
+
 	now := time.Now()
-	
+
 	task := &models.Task{
 		ContainerName: containerName,
 		Action:        action,
@@ -230,24 +241,24 @@ func CreateSyncTask(containerName, action, userID string, fn TaskFunc) error {
 		Status:        models.TaskRunning,
 		StartedAt:     &now,
 	}
-	
+
 	if err := db.DB.Create(task).Error; err != nil {
 		return err
 	}
-	
+
 	var logs []string
 	logs = append(logs, fmt.Sprintf("[%s] 任务开始执行", now.Format("2006-01-02 15:04:05")))
 	logs = append(logs, fmt.Sprintf("容器: %s, 操作: %s", containerName, action))
-	
+
 	ctx := context.Background()
 	err := fn(ctx)
-	
+
 	completed := time.Now()
 	duration := completed.Sub(now).Milliseconds()
-	
+
 	logs = append(logs, fmt.Sprintf("[%s] 任务执行完成", completed.Format("2006-01-02 15:04:05")))
 	logs = append(logs, fmt.Sprintf("耗时: %dms", duration))
-	
+
 	if err != nil {
 		logs = append(logs, fmt.Sprintf("执行失败: %v", err))
 		db.DB.Model(&models.Task{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
@@ -259,14 +270,14 @@ func CreateSyncTask(containerName, action, userID string, fn TaskFunc) error {
 		})
 		return err
 	}
-	
+
 	db.DB.Model(&models.Task{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
 		"status":       models.TaskSuccess,
 		"completed_at": &completed,
 		"duration":     duration,
 		"logs":         strings.Join(logs, "\n"),
 	})
-	
+
 	return nil
 }
 
@@ -277,4 +288,3 @@ func UpdateTaskResult(ctx context.Context, result string) {
 	}
 	db.DB.Model(&models.Task{}).Where("id = ?", taskID).Update("result", result)
 }
-

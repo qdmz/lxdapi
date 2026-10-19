@@ -2,6 +2,7 @@ package admin
 
 import (
 	"github.com/gin-gonic/gin"
+	"lxdapi/internal/db"
 	"lxdapi/internal/service"
 	"lxdapi/models"
 	"lxdapi/pkg/logger"
@@ -349,4 +350,57 @@ func RegenerateAPIKey(c *gin.Context) {
 		"user":     user,
 		"password": user.APIKey,
 	})
+}
+
+// AdjustBalance 管理员调整用户余额
+// @Summary 调整用户余额
+// @Description 管理员为用户充值/扣减余额（delta 为带符号增量），并可选设置自动续费开关
+// @Tags Admin API - 用户管理
+// @Accept json
+// @Produce json
+// @Param request body object{user_id=int, delta=float, auto_renew=bool} true "调整参数"
+// @Success 200 {object} response.Response "调整成功"
+// @Security SessionAuth
+// @Router /api/admin/users/balance [post]
+func AdjustBalance(c *gin.Context) {
+	var req struct {
+		UserID  *uint   `json:"user_id" binding:"required"`
+		Delta   *float64 `json:"delta"`
+		Balance *float64 `json:"balance"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "参数错误: "+err.Error())
+		return
+	}
+
+	var user models.User
+	if err := db.DB.First(&user, *req.UserID).Error; err != nil {
+		response.Error(c, 404, "用户不存在")
+		return
+	}
+
+	newBalance := user.Balance
+	switch {
+	case req.Balance != nil:
+		newBalance = *req.Balance
+	case req.Delta != nil:
+		newBalance = user.Balance + *req.Delta
+	default:
+		response.Error(c, 400, "请提供 balance 或 delta")
+		return
+	}
+
+	if newBalance < 0 {
+		response.Error(c, 400, "余额不能为负数")
+		return
+	}
+
+	if err := db.DB.Model(&user).Update("balance", newBalance).Error; err != nil {
+		response.Error(c, 500, "调整余额失败")
+		return
+	}
+	user.Balance = newBalance
+
+	logger.OK("管理员调整用户 %d 余额至 %.2f", user.ID, newBalance)
+	response.Success(c, gin.H{"user_id": user.ID, "balance": user.Balance})
 }

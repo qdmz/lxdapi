@@ -9,6 +9,7 @@ import (
 	"lxdapi/internal/ipv4"
 	"lxdapi/internal/ipv6"
 	"lxdapi/internal/lxc"
+	"lxdapi/internal/node"
 	"lxdapi/models"
 	"lxdapi/pkg/logger"
 	"lxdapi/pkg/plugin"
@@ -71,6 +72,11 @@ func generatePassword() string {
 }
 
 func (s *ContainerService) Create(ctx context.Context, req *models.CreateContainerRequest) error {
+	// 节点路由：按请求指定节点选择 LXD 客户端（0=本机默认节点）
+	client := node.ClientForNode(req.NodeID)
+	s.lxcClient = client
+	logger.Info("容器创建路由到节点 %d", req.NodeID)
+
 	if s.lxcClient.ContainerExists(ctx, req.Name) {
 		return fmt.Errorf("容器已存在: %s", req.Name)
 	}
@@ -188,6 +194,7 @@ func (s *ContainerService) Create(ctx context.Context, req *models.CreateContain
 	container := &models.Container{
 		Name:         req.Name,
 		UserID:       req.Username,
+		NodeID:       req.NodeID,
 		Image:        imageAlias,
 		Password:     actualPassword,
 		Status:       "stopped",

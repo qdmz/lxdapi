@@ -68,3 +68,39 @@ func UserResetPage(c *gin.Context) {
 		"token": c.Query("token"),
 	}))
 }
+
+// UserShop 产品购买页
+func UserShop(c *gin.Context) {
+	c.HTML(http.StatusOK, "user/user_shop.html", utils.MergeTemplateData(c, gin.H{
+		"title": "购买服务 - LXD API",
+	}))
+}
+
+// UserOrders 我的订单页
+func UserOrders(c *gin.Context) {
+	c.HTML(http.StatusOK, "user/user_orders.html", utils.MergeTemplateData(c, gin.H{
+		"title": "我的订单 - LXD API",
+	}))
+}
+
+// UserTickets 工单列表页
+func UserTickets(c *gin.Context) {
+	c.HTML(http.StatusOK, "user/user_tickets.html", utils.MergeTemplateData(c, gin.H{
+		"title": "工单中心 - LXD API",
+	}))
+}
+
+// UserTicketDetail 工单详情页
+func UserTicketDetail(c *gin.Context) {
+	c.HTML(http.StatusOK, "user/user_ticket_detail.html", utils.MergeTemplateData(c, gin.H{
+		"title": "工单详情 - LXD API",
+		"id":    c.Query("id"),
+	}))
+}
+
+// UserNotifications 站内消息页
+func UserNotifications(c *gin.Context) {
+	c.HTML(http.StatusOK, "user/user_notifications.html", utils.MergeTemplateData(c, gin.H{
+		"title": "站内消息 - LXD API",
+	}))
+}

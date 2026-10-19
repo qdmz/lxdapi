@@ -189,9 +189,104 @@ func ConsolePage(c *gin.Context) {
 	})
 }
 
+// ConsoleSFTPPage SFTP 文件管理页
+func ConsoleSFTPPage(c *gin.Context) {
+	token := c.Query("token")
+	if token == "" {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{
+			"error": "缺少访问令牌",
+		})
+		return
+	}
+
+	containerName, valid, errMsg := console.ValidateToken(token)
+	if !valid {
+		c.HTML(http.StatusUnauthorized, "error.html", gin.H{
+			"error": errMsg,
+		})
+		return
+	}
+
+	var container models.Container
+	image := "未知"
+	status := "未知"
+	if err := db.DB.Where("name = ?", containerName).First(&container).Error; err == nil {
+		if container.Image != "" {
+			image = container.Image
+		}
+		if container.Status != "" {
+			status = container.Status
+		}
+	}
+
+	c.HTML(http.StatusOK, "console_sftp.html", gin.H{
+		"hostname": containerName,
+		"image":    image,
+		"status":   status,
+	})
+}
+
 // AdminSMTPSettings 邮件服务配置页
 func AdminSMTPSettings(c *gin.Context) {
 	c.HTML(http.StatusOK, "admin/admin_smtp.html", utils.MergeTemplateData(c, gin.H{
 		"title": "邮件服务配置 - LXD API",
+	}))
+}
+
+// AdminProducts 产品管理页
+func AdminProducts(c *gin.Context) {
+	c.HTML(http.StatusOK, "admin/admin_products.html", utils.MergeTemplateData(c, gin.H{
+		"title": "产品管理 - LXD API",
+	}))
+}
+
+// AdminProductEdit 产品编辑页
+func AdminProductEdit(c *gin.Context) {
+	c.HTML(http.StatusOK, "admin/admin_product_edit.html", utils.MergeTemplateData(c, gin.H{
+		"title": "编辑产品 - LXD API",
+		"id":    c.Query("id"),
+	}))
+}
+
+// AdminOrders 订单管理页
+func AdminOrders(c *gin.Context) {
+	c.HTML(http.StatusOK, "admin/admin_orders.html", utils.MergeTemplateData(c, gin.H{
+		"title": "订单管理 - LXD API",
+	}))
+}
+
+// AdminTickets 工单管理页
+func AdminTickets(c *gin.Context) {
+	c.HTML(http.StatusOK, "admin/admin_tickets.html", utils.MergeTemplateData(c, gin.H{
+		"title": "工单管理 - LXD API",
+	}))
+}
+
+// AdminTicketDetail 工单详情页
+func AdminTicketDetail(c *gin.Context) {
+	c.HTML(http.StatusOK, "admin/admin_ticket_detail.html", utils.MergeTemplateData(c, gin.H{
+		"title": "工单详情 - LXD API",
+		"id":    c.Param("id"),
+	}))
+}
+
+// AdminMessages 消息管理页
+func AdminMessages(c *gin.Context) {
+	c.HTML(http.StatusOK, "admin/admin_messages.html", utils.MergeTemplateData(c, gin.H{
+		"title": "站内消息 - LXD API",
+	}))
+}
+
+// AdminPaymentSettings 支付配置页
+func AdminPaymentSettings(c *gin.Context) {
+	c.HTML(http.StatusOK, "admin/admin_payment.html", utils.MergeTemplateData(c, gin.H{
+		"title": "支付配置 - LXD API",
+	}))
+}
+
+// AdminNodes 节点管理页
+func AdminNodes(c *gin.Context) {
+	c.HTML(http.StatusOK, "admin/admin_nodes.html", utils.MergeTemplateData(c, gin.H{
+		"title": "节点管理 - LXD API",
 	}))
 }

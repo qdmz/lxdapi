@@ -67,7 +67,7 @@ $(function () {
 });
 function loadCaptcha() {
     $.get('/api/public/captcha', function (r) {
-        if (r.code === 200) $('#captchaImg').attr('src', 'data:image/png;base64,' + r.image);
+        if (r.code === 200) { var img = r.image; if (img.indexOf('data:') !== 0) img = 'data:image/png;base64,' + img; $('#captchaImg').attr('src', img); }
     });
 }
 $('#registerForm').on('submit', function (e) {

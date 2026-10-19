@@ -39,5 +39,9 @@ type User struct {
 	ResetExpire   *time.Time
 	RegisteredIP  string     `gorm:"size:64"`
 	LastLoginAt   *time.Time
+
+	// 余额与自动续费
+	Balance          float64 `gorm:"column:balance;default:0"`            // 账户余额（元）
+	AutoRenewEnabled bool    `gorm:"column:auto_renew_flag;default:false"` // 是否自动续费
 }
 

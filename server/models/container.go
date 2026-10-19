@@ -6,6 +6,7 @@ type Container struct {
 	gorm.Model
 	Name         string `gorm:"uniqueIndex;size:255"`
 	UserID       string `gorm:"index;size:255"`
+	NodeID       uint   `gorm:"index;default:0"` // 归属节点，0=本机默认节点
 	Image        string `gorm:"size:255"`
 	Password     string `gorm:"size:255"`
 	Status       string `gorm:"size:50"`
@@ -73,6 +74,7 @@ type CreateContainerRequest struct {
 	IORead          int    `json:"io_read"`
 	IOWrite         int    `json:"io_write"`
 	ProcessesLimit  int    `json:"processes_limit"`
+	NodeID          uint   `json:"node_id"` // 归属节点，0=本机默认节点
 }
 
 type UpdateContainerConfigRequest struct {

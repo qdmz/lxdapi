@@ -51,7 +51,7 @@ func Init() error {
 		return err
 	}
 
-	return DB.AutoMigrate(
+	err = DB.AutoMigrate(
 		&models.Container{},
 		&models.User{},
 		&models.Traffic{},
@@ -75,11 +75,40 @@ func Init() error {
 		&models.SystemSetting{},
 		&models.Product{},
 		&models.Plan{},
-		&models.PaymentOrder{},
+		&models.Node{},
+		&models.Region{},
+		&models.Order{},
 		&models.PayConfig{},
 		&models.Ticket{},
 		&models.TicketMessage{},
 		&models.Notification{},
+		&models.BalanceLog{},
 	)
+	if err != nil {
+		return err
+	}
+
+	// 为已有数据库补齐用户余额 / 自动续费字段（针对老库升级）
+	migrateUserBalance(DB)
+	return nil
+}
+
+// migrateUserBalance 确保 users 表包含余额与自动续费字段（针对老库升级）
+func migrateUserBalance(gdb *gorm.DB) {
+	type colDef struct {
+		name string
+	 ddl  string
+	}
+	cols := []colDef{
+		{"balance", "ALTER TABLE users ADD COLUMN balance REAL DEFAULT 0"},
+		{"auto_renew_flag", "ALTER TABLE users ADD COLUMN auto_renew_flag INTEGER DEFAULT 0"},
+	}
+	for _, c := range cols {
+		if !gdb.Migrator().HasColumn(&models.User{}, c.name) {
+			if err := gdb.Exec(c.ddl).Error; err != nil {
+				continue
+			}
+		}
+	}
 }
 

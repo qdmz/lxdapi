@@ -103,7 +103,9 @@
                     </div>
                     <div class="form-control">
                         <label class="label"><span class="label-text">镜像</span></label>
-                        <input type="text" id="productImage" placeholder="debian-12-net" class="input input-bordered">
+                        <select id="productImage" class="select select-bordered">
+                            <option value="">请选择镜像（先选择节点）</option>
+                        </select>
                     </div>
                     <div class="form-control">
                         <label class="label"><span class="label-text">库存（-1 不限）</span></label>
@@ -165,6 +167,36 @@
                 nodesCache = data.data || [];
                 const sel = document.getElementById('productNode');
                 sel.innerHTML = '<option value="0">默认节点</option>' + nodesCache.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
+                sel.onchange = () => loadNodeImages(sel.value);
+            }
+        }
+
+        async function loadNodeImages(nodeId) {
+            const sel = document.getElementById('productImage');
+            if (!nodeId || nodeId === '0') {
+                sel.innerHTML = '<option value="">请选择镜像（先选择节点）</option>';
+                return;
+            }
+            sel.innerHTML = '<option value="">加载中...</option>';
+            try {
+                const res = await fetch(`${API_BASE}/nodes/${nodeId}/images`);
+                const data = await res.json();
+                if (data.code === 200 && data.data) {
+                    const images = Array.isArray(data.data) ? data.data : [];
+                    if (images.length === 0) {
+                        sel.innerHTML = '<option value="">该节点暂无镜像</option>';
+                    } else {
+                        sel.innerHTML = '<option value="">请选择镜像</option>' + images.map(img => {
+                            const name = img.alias || img.fingerprint || img.name || '';
+                            const desc = img.description ? ` - ${img.description}` : '';
+                            return `<option value="${name}">${name}${desc}</option>`;
+                        }).join('');
+                    }
+                } else {
+                    sel.innerHTML = '<option value="">加载失败</option>';
+                }
+            } catch (e) {
+                sel.innerHTML = '<option value="">加载失败</option>';
             }
         }
 
@@ -235,7 +267,16 @@
                         document.getElementById('productPriceQuarterly').value = data.data.price_quarterly || 0;
                         document.getElementById('productPriceYearly').value = data.data.price_yearly || 0;
                         document.getElementById('productNode').value = data.data.node_id || 0;
-                        document.getElementById('productImage').value = data.data.image || '';
+                        await loadNodeImages(data.data.node_id || 0);
+                        // 如果已有镜像值不在下拉中，保留为自定义选项
+                        const imgSel = document.getElementById('productImage');
+                        const curImg = data.data.image || '';
+                        if (curImg && !Array.from(imgSel.options).some(o => o.value === curImg)) {
+                            const opt = document.createElement('option');
+                            opt.value = curImg; opt.textContent = curImg + ' (当前)';
+                            imgSel.appendChild(opt);
+                        }
+                        imgSel.value = curImg;
                         document.getElementById('productStock').value = data.data.stock == null ? -1 : data.data.stock;
                         document.getElementById('productSort').value = data.data.sort || 0;
                         document.getElementById('productStatus').value = data.data.status;

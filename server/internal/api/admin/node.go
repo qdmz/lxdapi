@@ -137,3 +137,26 @@ func TestNode(c *gin.Context) {
 	db.DB.Model(&node).Update("status", "online")
 	response.Success(c, gin.H{"status": "online"})
 }
+
+// GetNodeImages 获取指定节点的镜像列表
+func GetNodeImages(c *gin.Context) {
+	var node models.Node
+	if err := db.DB.First(&node, c.Param("id")).Error; err != nil {
+		response.Error(c, 404, "节点不存在")
+		return
+	}
+	var client *lxc.Client
+	if node.Host == "" {
+		client = lxc.NewClient()
+	} else {
+		client = lxc.NewRemoteClient(node.Host, node.APIPort)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	images, err := client.ListImages(ctx)
+	if err != nil {
+		response.Error(c, 500, "获取镜像列表失败: "+err.Error())
+		return
+	}
+	response.Success(c, images)
+}

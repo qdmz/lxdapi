@@ -609,6 +609,7 @@ func main() {
 		adminAPI.PUT("/nodes/:id", admin.UpdateNode)
 		adminAPI.DELETE("/nodes/:id", admin.DeleteNode)
 		adminAPI.POST("/nodes/:id/test", admin.TestNode)
+		adminAPI.GET("/nodes/:id/images", admin.GetNodeImages)
 		adminAPI.GET("/regions", admin.ListRegions)
 		adminAPI.POST("/regions", admin.CreateRegion)
 		adminAPI.PUT("/regions/:id", admin.UpdateRegion)

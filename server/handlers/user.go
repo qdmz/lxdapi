@@ -98,7 +98,7 @@ func UserTickets(c *gin.Context) {
 func UserTicketDetail(c *gin.Context) {
 	c.HTML(http.StatusOK, "user/user_ticket_detail.html", utils.MergeTemplateData(c, gin.H{
 		"title": "工单详情 - LXD API",
-		"id":    c.Query("id"),
+		"id":    c.Param("id"),
 	}))
 }
 

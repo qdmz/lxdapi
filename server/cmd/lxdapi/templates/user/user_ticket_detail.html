@@ -80,7 +80,7 @@ function loadTicket() {
     $.get(API + '/tickets/' + ticketId, function (r) {
         if (r.code !== 200) { alert(r.msg || '加载失败'); return; }
         var t = r.data;
-        document.getElementById('ticketMeta').textContent = '工单 #' + gv(t,'id','ID') + ' · ' + statusBadge(gv(t,'status','Status'));
+        document.getElementById('ticketMeta').innerHTML = '工单 #' + esc(gv(t,'id','ID')) + ' · ' + statusBadge(gv(t,'status','Status'));
         document.getElementById('ticketTitle').textContent = gv(t,'title','Title');
         document.getElementById('ticketContent').textContent = gv(t,'content','Content');
         document.getElementById('replyBox').style.display = (gv(t,'status','Status') === 'closed') ? 'none' : 'block';

@@ -139,6 +139,14 @@ func AdminCreateNotification(c *gin.Context) {
 		return
 	}
 
+	// notifications.user_id 有外键指向 users.id，目标用户不存在时
+	// 直接查出来给明确提示，而不是让 INSERT 撞外键后报笼统失败。
+	var target models.User
+	if err := db.DB.First(&target, req.UserID).Error; err != nil {
+		response.Error(c, 400, "目标用户不存在")
+		return
+	}
+
 	if req.Type == "" {
 		req.Type = "system"
 	}

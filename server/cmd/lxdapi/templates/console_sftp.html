@@ -38,6 +38,10 @@
                 <button class="bg-white border border-gray-300 rounded-md px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all font-medium" id="btn-refresh" title="刷新列表">刷新</button>
                 <button class="bg-white border border-gray-300 rounded-md px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all font-medium" id="btn-mkdir" title="新建文件夹">新建文件夹</button>
                 <button class="bg-white border border-gray-300 rounded-md px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all font-medium" id="btn-upload" title="上传文件">上传文件</button>
+                <button class="bg-white border border-gray-300 rounded-md px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all font-medium" id="btn-uploaddir" title="上传整个文件夹">上传目录</button>
+                <button class="bg-white border border-gray-300 rounded-md px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all font-medium" id="btn-newfile" title="在当前目录新建空文件">新建文件</button>
+                <button class="bg-white border border-gray-300 rounded-md px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all font-medium" id="btn-archive" title="把勾选的文件/目录打包">打包所选</button>
+                <input type="file" id="dir-input" class="hidden" webkitdirectory>
             </div>
             <div class="flex items-center gap-1.5 lg:gap-2 bg-gray-50 px-2 lg:px-3 py-1 lg:py-1.5 rounded-full border border-gray-200">
                 <div class="status-dot" id="status-dot"></div>
@@ -164,6 +168,24 @@
             </div>
         </div>
     </div>
+
+    <!-- Generic form modal (rename / copy / move / chmod+chown / archive / new file) -->
+    <div class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-40" id="form-modal">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 class="font-semibold text-gray-800" id="form-title">操作</h3>
+                <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" id="form-close">&times;</button>
+            </div>
+            <div class="p-5 space-y-3" id="form-fields"></div>
+            <div class="px-5 py-4 bg-gray-50 rounded-b-lg text-right">
+                <button class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md text-sm font-medium mr-2 transition-all" id="form-cancel">取消</button>
+                <button class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-all" id="form-ok">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row "more" menu -->
+    <div class="hidden fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl py-1 w-36 text-sm" id="row-menu"></div>
 
     <!-- Progress toast -->
     <div class="fixed bottom-6 right-6 z-50 space-y-2" id="toasts"></div>

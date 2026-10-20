@@ -9,6 +9,7 @@ import (
 	"lxdapi/pkg/response"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // CreateTicket 创建工单
@@ -188,16 +189,29 @@ func GetNotifications(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	typeFilter := c.Query("type")
 
-	query := db.DB.Where("user_id = ?", userID)
-	if typeFilter != "" {
-		query = query.Where("type = ?", typeFilter)
+	// 根因修（吴验收发现）：之前这段用不带 Model 的裸链
+	// `db.DB.Where(...)` 先 Count 再 Find——Count 因无模型无法解析表名而报错
+	// （错误被吞），复用同一条链的 Find 也拿不到数据，导致"未读有 N 条、
+	// 列表 0 条"的口径不一致。现在按 Model 单独起两条链并检查错误。
+	base := func() *gorm.DB {
+		q := db.DB.Model(&models.Notification{}).Where("user_id = ?", userID)
+		if typeFilter != "" {
+			q = q.Where("type = ?", typeFilter)
+		}
+		return q
+	}
+
+	var total int64
+	if err := base().Count(&total).Error; err != nil {
+		response.Error(c, 500, "获取通知列表失败")
+		return
 	}
 
 	var notifications []models.Notification
-	var total int64
-
-	query.Count(&total)
-	query.Order("created_at DESC").Limit(pageSize).Offset((page - 1) * pageSize).Find(&notifications)
+	if err := base().Order("created_at DESC").Limit(pageSize).Offset((page - 1) * pageSize).Find(&notifications).Error; err != nil {
+		response.Error(c, 500, "获取通知列表失败")
+		return
+	}
 
 	response.Success(c, gin.H{
 		"list":  notifications,

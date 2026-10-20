@@ -41,9 +41,10 @@ class SFTPClient {
   close() { this._closeWs(); }
 
   _onClose() {
+    const why = this.fatalError || '连接已断开';
     for (const p of this.pending.values()) {
       clearTimeout(p.timer);
-      p.reject(new Error('连接已断开'));
+      p.reject(new Error(why));
     }
     this.pending.clear();
     this.ws = null;
@@ -59,7 +60,20 @@ class SFTPClient {
         clearTimeout(p.timer);
         this.pending.delete(msg.id);
         p.resolve(msg);
+        return;
       }
+    }
+
+    // 服务端在请求到来之前就失败（例如容器缺 sftp-server）时发出的错误帧
+    // 不对应任何请求 id。作为致命错误处理，让等待中的请求拿到真实原因，
+    // 而不是在 WS 关闭后被统一盖成"连接已断开"。
+    if (msg && msg.error) {
+      this.fatalError = msg.error;
+      for (const p of this.pending.values()) {
+        clearTimeout(p.timer);
+        p.reject(new Error(msg.error));
+      }
+      this.pending.clear();
       return;
     }
 
@@ -92,7 +106,9 @@ class SFTPClient {
   }
 
   async list(path) {
-    const r = await this.request('list', { path: path || '/' });
+    // 首次连接时服务端可能要在容器内自动安装 sftp-server，
+    // 给 list 较长的超时，避免把安装时间误报为操作超时。
+    const r = await this.request('list', { path: path || '/' }, 180000);
     if (!r.ok) throw new Error(r.error || '列举失败');
     return r.files || [];
   }
@@ -116,6 +132,47 @@ class SFTPClient {
   async edit(path, content) {
     const r = await this.request('edit', { path, content, size: content.length });
     if (!r.ok) throw new Error(r.error || '保存失败');
+  }
+
+  async createFile(path) {
+    const r = await this.request('create_file', { path });
+    if (!r.ok) throw new Error(r.error || '新建文件失败');
+  }
+
+  async rename(oldPath, newPath) {
+    const r = await this.request('rename', { path: oldPath, new_path: newPath });
+    if (!r.ok) throw new Error(r.error || '重命名失败');
+  }
+
+  async chmod(path, perm) {
+    const r = await this.request('chmod', { path, perm });
+    if (!r.ok) throw new Error(r.error || '修改权限失败');
+  }
+
+  async chown(path, uid, gid) {
+    const r = await this.request('chown', { path, uid, gid });
+    if (!r.ok) throw new Error(r.error || '修改属主失败');
+  }
+
+  async copy(src, dst) {
+    const r = await this.request('copy', { path: src, new_path: dst }, 300000);
+    if (!r.ok) throw new Error(r.error || '复制失败');
+  }
+
+  async move(src, dst) {
+    const r = await this.request('move', { path: src, new_path: dst }, 300000);
+    if (!r.ok) throw new Error(r.error || '移动失败');
+  }
+
+  async archive(dir, names, format, name) {
+    const r = await this.request('archive', { path: dir, names, format, name }, 300000);
+    if (!r.ok) throw new Error(r.error || '打包失败');
+    return r.path;
+  }
+
+  async extract(pkg, targetDir) {
+    const r = await this.request('extract', { path: pkg, new_path: targetDir }, 300000);
+    if (!r.ok) throw new Error(r.error || '解压失败');
   }
 
   // Uploads a File/Blob in 64 KiB base64 chunks. onProgress(percent) is called
@@ -232,6 +289,15 @@ class SFTPUI {
     document.getElementById('btn-refresh').addEventListener('click', () => this.refresh());
     document.getElementById('btn-mkdir').addEventListener('click', () => this.showMkdir());
     document.getElementById('btn-upload').addEventListener('click', () => this.showUpload());
+    document.getElementById('btn-newfile').addEventListener('click', () => this.showNewFile());
+    document.getElementById('btn-archive').addEventListener('click', () => this.showArchiveSelected());
+    const $dirInput = document.getElementById('dir-input');
+    document.getElementById('btn-uploaddir').addEventListener('click', () => { if (this.connected) $dirInput.click(); else this.toast('请先连接容器', 'error'); });
+    $dirInput.addEventListener('change', () => { this.uploadDirectory($dirInput.files); $dirInput.value = ''; });
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('row-menu');
+      if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target)) menu.classList.add('hidden');
+    });
 
     this._initModals();
     this._renderBreadcrumb();
@@ -331,9 +397,9 @@ class SFTPUI {
         <td class="px-4 lg:px-6 py-2 lg:py-3">${isDir
           ? '<svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>'
           : '<svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>'}</td>
-        <td class="px-4 lg:px-6 py-2 lg:py-3">${isDir
+        <td class="px-4 lg:px-6 py-2 lg:py-3"><div class="flex items-center gap-2"><input type="checkbox" class="row-check w-4 h-4 flex-shrink-0" data-name="${encodeURIComponent(name)}">${isDir
           ? `<button class="flex items-center gap-2 text-left hover:text-blue-600 transition-colors" data-action="cd" data-name="${encodeURIComponent(name)}"><span class="font-medium">${name}</span></button>`
-          : `<div class="flex items-center gap-2"><span class="font-medium">${name}</span></div>`}</td>
+          : `<span class="font-medium">${name}</span>`}</div></td>
         <td class="px-4 lg:px-6 py-2 lg:py-3 hidden lg:table-cell text-right tabular-nums">${isDir ? '-' : formatSize(f.size)}</td>
         <td class="px-4 lg:px-6 py-2 lg:py-3 hidden lg:table-cell">${formatDate(f.modTime)}</td>
         <td class="px-4 lg:px-6 py-2 lg:py-3 hidden lg:table-cell">${isDir ? '目录' : f.type === 'link' ? '链接' : '文件'}</td>
@@ -341,6 +407,7 @@ class SFTPUI {
           <div class="flex justify-end gap-1">
             ${!isDir ? `<button class="action-btn text-gray-400 hover:text-blue-600 p-1 rounded" title="下载" data-action="download" data-name="${encodeURIComponent(name)}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg></button>` : ''}
             ${!isDir ? `<button class="action-btn text-gray-400 hover:text-blue-600 p-1 rounded" title="编辑" data-action="edit" data-name="${encodeURIComponent(name)}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-5m-6 0v6m6-6H9m10-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></button>` : ''}
+            <button class="action-btn text-gray-400 hover:text-blue-600 p-1 rounded" title="更多操作" data-action="more" data-name="${encodeURIComponent(name)}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01"></path></svg></button>
             <button class="action-btn text-gray-400 hover:text-red-600 p-1 rounded" title="删除" data-action="delete" data-name="${encodeURIComponent(name)}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v3m5-3m0 0m-5 3m5-3H4"></path></svg></button>
           </div>
         </td>`;
@@ -356,7 +423,14 @@ class SFTPUI {
         else if (action === 'download') { this.download(target, name); }
         else if (action === 'edit') { this.edit(target, name); }
         else if (action === 'delete') { this.confirmDelete(target, name); }
+        else if (action === 'more') { this.openRowMenu(btn, target, name, f); }
       });
+      if (!isDir) {
+        tr.addEventListener('dblclick', (e) => {
+          if (e.target.closest('button') || e.target.closest('input')) return;
+          this.edit(this._join(this.path, f.name), f.name);
+        });
+      }
       frag.appendChild(tr);
     }
     this.$tbody.appendChild(frag);
@@ -565,5 +639,249 @@ class SFTPUI {
     this._deleteState.setTarget(target);
     this._deleteState.msgEl.textContent = `确定要删除 "${name}" 吗？此操作不可恢复。`;
     document.getElementById('delete-modal').classList.remove('hidden');
+  }
+
+  // ---------- 通用表单弹窗 ----------
+  openForm(title, fields, okLabel, onOk) {
+    const modal = document.getElementById('form-modal');
+    document.getElementById('form-title').textContent = title;
+    const body = document.getElementById('form-fields');
+    body.innerHTML = '';
+    const inputs = {};
+    for (const f of fields) {
+      const wrap = document.createElement('div');
+      const label = document.createElement('label');
+      label.className = 'block text-sm font-medium text-gray-700 mb-1';
+      label.textContent = f.label;
+      wrap.appendChild(label);
+      let input;
+      if (f.type === 'select') {
+        input = document.createElement('select');
+        for (const opt of f.options) {
+          const o = document.createElement('option');
+          o.value = opt.value; o.textContent = opt.text;
+          if (opt.value === f.value) o.selected = true;
+          input.appendChild(o);
+        }
+      } else {
+        input = document.createElement('input');
+        input.type = f.type || 'text';
+        if (f.placeholder) input.placeholder = f.placeholder;
+        if (f.value !== undefined && f.value !== null) input.value = f.value;
+      }
+      input.className = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+      if (f.hint) {
+        const h = document.createElement('p');
+        h.className = 'text-xs text-gray-500 mt-1';
+        h.textContent = f.hint;
+        wrap.appendChild(input); wrap.appendChild(h);
+      } else {
+        wrap.appendChild(input);
+      }
+      body.appendChild(wrap);
+      inputs[f.id] = input;
+    }
+    const close = () => modal.classList.add('hidden');
+    document.getElementById('form-close').onclick = close;
+    document.getElementById('form-cancel').onclick = close;
+    const okBtn = document.getElementById('form-ok');
+    okBtn.textContent = okLabel || '确定';
+    okBtn.onclick = async () => {
+      const values = {};
+      for (const k in inputs) values[k] = inputs[k].value;
+      try {
+        await onOk(values);
+        close();
+      } catch (err) {
+        this.toast(err.message || '操作失败', 'error');
+      }
+    };
+    modal.classList.remove('hidden');
+  }
+
+  // ---------- 行"更多"菜单 ----------
+  openRowMenu(btn, target, name, file) {
+    const menu = document.getElementById('row-menu');
+    const isDir = file.type === 'directory';
+    const lower = name.toLowerCase();
+    const isArchive = lower.endsWith('.zip') || lower.endsWith('.tar.gz') || lower.endsWith('.tgz') || lower.endsWith('.tar');
+    const items = [
+      { label: '重命名', fn: () => this.showRename(target, name) },
+      { label: '复制', fn: () => this.showCopyMove(target, name, false) },
+      { label: '移动', fn: () => this.showCopyMove(target, name, true) },
+      { label: '权限/属主', fn: () => this.showPerm(target, name, file) },
+      { label: '打包为压缩包', fn: () => this.showArchive(target, name) },
+    ];
+    if (isArchive) items.push({ label: '解压到当前目录', fn: () => this.doExtract(target, this.path) });
+    if (!isDir) {
+      items.unshift({ label: '下载', fn: () => this.download(target, name) });
+      items.unshift({ label: '编辑', fn: () => this.edit(target, name) });
+    }
+    menu.innerHTML = '';
+    for (const it of items) {
+      const b = document.createElement('button');
+      b.className = 'block w-full text-left px-3 py-2 hover:bg-blue-50 hover:text-blue-600 text-gray-700 transition-colors';
+      b.textContent = it.label;
+      b.onclick = (e) => { e.stopPropagation(); menu.classList.add('hidden'); it.fn(); };
+      menu.appendChild(b);
+    }
+    const rect = btn.getBoundingClientRect();
+    menu.style.top = Math.min(rect.bottom + 4, window.innerHeight - items.length * 36 - 16) + 'px';
+    menu.style.left = Math.max(8, rect.right - 150) + 'px';
+    menu.classList.remove('hidden');
+    setTimeout(() => document.addEventListener('click', function close(e) {
+      if (!menu.contains(e.target)) { menu.classList.add('hidden'); document.removeEventListener('click', close); }
+    }), 0);
+  }
+
+  // ---------- 新建文件 ----------
+  showNewFile() {
+    if (!this.connected) { this.toast('请先连接容器', 'error'); return; }
+    this.openForm('新建文件', [
+      { id: 'name', label: '文件名', placeholder: '例如: config.json', hint: '在当前目录 ' + this.path + ' 下创建' },
+    ], '创建', async (v) => {
+      const n = (v.name || '').trim();
+      if (!n || n.indexOf('/') >= 0) throw new Error('文件名不能为空且不能含 /');
+      await this.client.createFile(this._join(this.path, n));
+      this.toast('文件已创建', 'success');
+      await this.refresh();
+    });
+  }
+
+  // ---------- 重命名 ----------
+  showRename(target, name) {
+    this.openForm('重命名', [
+      { id: 'name', label: '新名称', value: name },
+    ], '保存', async (v) => {
+      const n = (v.name || '').trim();
+      if (!n || n === name) return;
+      if (n.indexOf('/') >= 0) throw new Error('名称不能含 /');
+      await this.client.rename(target, this._join(this.path, n));
+      this.toast('已重命名', 'success');
+      await this.refresh();
+    });
+  }
+
+  // ---------- 复制 / 移动 ----------
+  showCopyMove(target, name, isMove) {
+    this.openForm(isMove ? '移动' : '复制', [
+      { id: 'dst', label: '目标路径', value: target, hint: '填完整目标路径（可改名），如 ' + this.path + '/' + name + (isMove ? ' 移动后原文件消失' : ' 复制保留原文件') },
+    ], isMove ? '移动' : '复制', async (v) => {
+      const dst = (v.dst || '').trim();
+      if (!dst) throw new Error('目标路径不能为空');
+      if (!dst.startsWith('/')) throw new Error('目标必须是绝对路径');
+      if (isMove) await this.client.move(target, dst);
+      else await this.client.copy(target, dst);
+      this.toast(isMove ? '已移动' : '已复制', 'success');
+      await this.refresh();
+    });
+  }
+
+  // ---------- 权限 / 属主 ----------
+  showPerm(target, name, file) {
+    const cur = file.permOctal || '';
+    this.openForm('权限 / 属主 - ' + name, [
+      { id: 'perm', label: '权限（八进制，如 644）', value: cur, placeholder: '644' },
+      { id: 'uid', label: '用户 ID（留空不修改）', placeholder: '如 0' },
+      { id: 'gid', label: '组 ID（留空不修改）', placeholder: '如 0' },
+    ], '应用', async (v) => {
+      const perm = (v.perm || '').trim();
+      const uid = (v.uid || '').trim();
+      const gid = (v.gid || '').trim();
+      if (perm) {
+        if (!/^[0-7]{3,4}$/.test(perm)) throw new Error('权限格式应为 3-4 位八进制');
+        await this.client.chmod(target, perm);
+      }
+      if (uid !== '' || gid !== '') {
+        const u = uid === '' ? -1 : parseInt(uid, 10);
+        const g = gid === '' ? -1 : parseInt(gid, 10);
+        await this.client.chown(target, u, g);
+      }
+      if (!perm && uid === '' && gid === '') throw new Error('没有可应用的修改');
+      this.toast('已应用', 'success');
+      await this.refresh();
+    });
+  }
+
+  // ---------- 打包 ----------
+  selectedNames() {
+    const names = [];
+    this.$tbody.querySelectorAll('.row-check:checked').forEach((c) => {
+      names.push(decodeURIComponent(c.dataset.name));
+    });
+    return names;
+  }
+
+  showArchive(target, name) {
+    this.showArchiveForm(this.path, [name]);
+  }
+
+  showArchiveSelected() {
+    if (!this.connected) { this.toast('请先连接容器', 'error'); return; }
+    const names = this.selectedNames();
+    if (!names.length) { this.toast('请先勾选要打包的文件/目录', 'error'); return; }
+    this.showArchiveForm(this.path, names);
+  }
+
+  showArchiveForm(dir, names) {
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+    this.openForm('打包压缩', [
+      { id: 'name', label: '压缩包文件名', value: 'archive-' + stamp + '.tar.gz' },
+      { id: 'format', label: '格式', type: 'select', value: 'tar.gz', options: [{ value: 'tar.gz', text: 'tar.gz（推荐）' }, { value: 'zip', text: 'zip（需容器内有 zip）' }] },
+    ], '开始打包', async (v) => {
+      let name = (v.name || '').trim();
+      if (!name) throw new Error('文件名不能为空');
+      if (name.indexOf('/') >= 0) throw new Error('文件名不能含 /');
+      const format = v.format === 'zip' ? 'zip' : 'tar.gz';
+      if (format === 'tar.gz' && !/\.tar\.gz$/i.test(name) && !/\.tgz$/i.test(name)) name += '.tar.gz';
+      if (format === 'zip' && !/\.zip$/i.test(name)) name += '.zip';
+      await this.client.archive(dir, names, format, name);
+      this.toast('打包完成', 'success');
+      await this.refresh();
+    });
+  }
+
+  // ---------- 解压 ----------
+  doExtract(target, dir) {
+    (async () => {
+      try {
+        await this.client.extract(target, dir);
+        this.toast('解压完成', 'success');
+        await this.refresh();
+      } catch (err) {
+        this.toast('解压失败: ' + (err.message || ''), 'error');
+      }
+    })();
+  }
+
+  // ---------- 上传目录 ----------
+  async uploadDirectory(files) {
+    if (!this.connected) { this.toast('请先连接容器', 'error'); return; }
+    if (!files || !files.length) return;
+    let root = files[0].webkitRelativePath ? files[0].webkitRelativePath.split('/')[0] : '';
+    if (!root) { this.toast('无法识别文件夹结构', 'error'); return; }
+    this.toast('开始上传目录 ' + root + '（' + files.length + ' 个文件）', 'info');
+    const made = new Set();
+    let ok = 0, fail = 0;
+    for (const f of files) {
+      const rel = f.webkitRelativePath || f.name;
+      const parts = rel.split('/');
+      parts.shift(); // 去掉顶层目录名
+      if (!parts.length || parts.some((p) => !p || p === '.' || p === '..')) { fail++; continue; }
+      // 逐层确保目录存在（已存在则忽略报错）
+      let acc = this._join(this.path, root);
+      try { await this.client.mkdir(acc); } catch (e) {}
+      for (let i = 0; i < parts.length - 1; i++) {
+        acc = this._join(acc, parts[i]);
+        if (!made.has(acc)) { try { await this.client.mkdir(acc); } catch (e) {} made.add(acc); }
+      }
+      const dest = this._join(acc, parts[parts.length - 1]);
+      try {
+        await this.client.upload(f, dest, () => {});
+        ok++;
+      } catch (e) { fail++; }
+    }
+    this.toast('目录上传完成: 成功 ' + ok + '，失败 ' + fail, fail ? 'error' : 'success');
+    await this.refresh();
   }
 }

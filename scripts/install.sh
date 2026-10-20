@@ -10,7 +10,7 @@ set -euo pipefail
 
 REPO="qdmz/lxdapi"
 BRANCH="${BRANCH:-main}"
-RELEASE_TAG="${RELEASE_TAG:-v0.02}"
+RELEASE_TAG="${RELEASE_TAG:-v0.03}"
 INSTALL_DIR="/opt/lxdapi"
 PANEL_DIR="/opt/lxdpanel"
 SRC_DIR=""
@@ -160,15 +160,18 @@ mkdir -p "$PANEL_DIR"
 cp -a "$WORK/src"/web/. "$PANEL_DIR/"
 
 # ---------- 10. 容器出网规则（Docker 共存时必需）----------
+# 注意：本段每条 iptables 都必须 || true。受限环境（虚拟化/权限不足）里
+# iptables 可能整体不可用，set -e 会让脚本在这一步静默退出、后面步骤全丢
+# （v0.02 时在 instabox 实测踩过）。本段失败只告警，不中断安装。
 if iptables -n -L DOCKER-USER >/dev/null 2>&1; then
   log "检测到 Docker，放行 LXD 网桥转发..."
-  iptables -C DOCKER-USER -i lxdbr0 -j ACCEPT 2>/dev/null || iptables -I DOCKER-USER 1 -i lxdbr0 -j ACCEPT
-  iptables -C DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -I DOCKER-USER 2 -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+  iptables -C DOCKER-USER -i lxdbr0 -j ACCEPT 2>/dev/null || iptables -I DOCKER-USER 1 -i lxdbr0 -j ACCEPT 2>/dev/null || warn "写入 DOCKER-USER 入站规则失败，忽略"
+  iptables -C DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -I DOCKER-USER 2 -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || warn "写入 DOCKER-USER 出站规则失败，忽略"
   CIDR="$(ip -4 -o addr show lxdbr0 2>/dev/null | awk '{print $4}' | head -1)"
   if [ -n "$CIDR" ]; then
     NET="$(python3 -c "import ipaddress,sys; print(ipaddress.ip_network(sys.argv[1], strict=False))" "$CIDR" 2>/dev/null || echo "")"
     if [ -n "$NET" ]; then
-      iptables -t nat -C POSTROUTING -s "$NET" ! -o lxdbr0 -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "$NET" ! -o lxdbr0 -j MASQUERADE
+      iptables -t nat -C POSTROUTING -s "$NET" ! -o lxdbr0 -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "$NET" ! -o lxdbr0 -j MASQUERADE 2>/dev/null || warn "写入 MASQUERADE 规则失败，忽略"
     fi
   fi
   echo "net.ipv4.ip_forward=1" > /etc/sysctl.d/99-lxd-forward.conf

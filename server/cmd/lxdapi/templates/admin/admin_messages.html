@@ -46,7 +46,9 @@
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 mt-4">
         <h2 class="text-sm font-bold text-gray-800 mb-3">发送通知给用户</h2>
         <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-            <input id="sendUserId" type="number" placeholder="用户ID" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 w-28" />
+            <select id="sendUserId" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 w-52">
+                <option value="">选择接收用户</option>
+            </select>
             <input id="sendTitle" type="text" placeholder="标题" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[160px]" />
             <input id="sendContent" type="text" placeholder="内容" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[200px]" />
             <button onclick="sendNotif()" class="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition">发送</button>
@@ -142,11 +144,30 @@ function delNotif(id) {
     });
 }
 
+// 接收用户下拉：从管理员用户列表拉取，避免手填不存在的
+// 数字 ID 导致发送时撞外键、只报笼统的"创建通知失败"。
+function loadUsers() {
+    $.get(API + '/users?page=1&page_size=200', function (r) {
+        if (r.code !== 200) return;
+        var users = (r.data && r.data.users) || [];
+        var sel = document.getElementById('sendUserId');
+        users.forEach(function (u) {
+            var id = (u.ID !== undefined && u.ID !== null) ? u.ID : u.id;
+            var name = u.Username || u.username || '';
+            if (id === undefined || id === null) return;
+            var opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = name + ' (#' + id + ')';
+            sel.appendChild(opt);
+        });
+    });
+}
+
 function sendNotif() {
     var uid = document.getElementById('sendUserId').value;
     var title = document.getElementById('sendTitle').value;
     var content = document.getElementById('sendContent').value;
-    if (!uid || !title || !content) { alert('用户ID、标题、内容都必填'); return; }
+    if (!uid || !title || !content) { alert('接收用户、标题、内容都必填'); return; }
     $.ajax({
         url: API + '/notifications',
         type: 'POST',
@@ -164,6 +185,7 @@ function sendNotif() {
     });
 }
 
+loadUsers();
 loadNotifs(1);
 </script>
 </div>

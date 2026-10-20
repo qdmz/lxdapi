@@ -3,7 +3,43 @@
 基于 **LXD** 的容器管理面板：Go 后端 + 纯静态前端，支持管理后台、用户后台、容器自助面板三级体系，内置 Web 终端（WebSocket）。
 
 - 仓库：https://github.com/qdmz/lxdapi
-- 当前版本：**v0.02**
+- 当前版本：**v0.03**
+
+### 在线演示
+
+| 环境 | 地址 | 说明 |
+|---|---|---|
+| InstaBox 演示 | https://8081-agqvpdd6dcho64yll6652vfoj4.instabox.tech | 最新版完整功能（含真实 LXD） |
+| 华为云 | https://lxd.huawei.ypvps.com | 长期运行环境 |
+
+后台初始账号 `admin`（密码见部署输出），登录后请立即修改。
+
+### 功能一览
+
+- **容器管理**：创建/启停/重启/重装/重置密码/删除、资源限额、实时监控、容器详情
+- **Web 控制台（VNC 终端）**：WebSocket 终端，令牌一次性使用；远程节点按节点端点连接
+- **SFTP 文件管理**：网页文件管理全套——列表、新建文件/文件夹、上传文件与**整个目录**（前端递归上传）、下载、**文本在线编辑**（双击打开）、删除（含非空目录递归删除）；行"更多"菜单含**重命名、复制、移动、权限/属主（chmod/chown）、打包（tar.gz/zip）、解压（tar.gz/tgz/tar/zip）**；路径统一绝对路径规范化与越界校验；容器缺 `sftp-server` 时按包管理器（apk/apt/dnf/yum）自动安装
+- **多节点**：节点 CRUD、连接测试、按节点同步镜像与存储池、资源按节点区分（IP 池/NAT/防火墙/反代）
+- **机房（Region）**：机房管理，节点归属机房
+- **网络**：IPv4/IPv6 池、NAT 端口转发（v4/v6）、防火墙（OpenGFW 插件）、反向代理、容器出网自检与一键修复
+- **电商**：产品（节点绑定/镜像/库存/多周期价格/限购/设置费/免费开通）、订单中心、易支付集成、支付回调自动开通、余额支付与**事务化退款**（流水一致、幂等）
+- **用户体系**：bcrypt 密码、注册/邮箱激活/找回密码、用户配额、个人资料自助修改、管理员模拟登录（虚拟登陆）
+- **营销与内容**：优惠券（领取/下单核销）、知识库（公开帮助中心 + 后台维护）
+- **客服与消息**：工单系统（用户/管理员双端对话）、站内通知（计数与列表一致、定向发送到具体用户）
+- **系统**：SMTP 邮件与模板、品牌设置、验证码、`/api/public/version` 与 `/healthz`
+
+### 运行截图
+
+| | |
+|---|---|
+| ![首页](docs/screenshots/01-home.png) | ![管理仪表盘](docs/screenshots/02-admin-dashboard.png) |
+| ![容器管理](docs/screenshots/03-admin-containers.png) | ![容器详情](docs/screenshots/04-admin-container-detail.png) |
+| ![用户容器](docs/screenshots/05-user-containers.png) | ![用户工单详情](docs/screenshots/06-user-ticket-detail.png) |
+| ![站内消息](docs/screenshots/07-user-notifications.png) | ![知识库](docs/screenshots/08-knowledge.png) |
+| **SFTP 文件管理** |
+| ![SFTP 文件管理](docs/screenshots/09-sftp-files.png) |
+| **文件操作菜单（编辑/下载/改名/复制/移动/权限/打包）** |
+| ![SFTP 更多菜单](docs/screenshots/10-sftp-menu.png) |
 
 ---
 
@@ -25,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/qdmz/lxdapi/main/scripts/install.sh
 | `--domain panel.example.com` | 写入 nginx `server_name` |
 | `--skip-lxd` | 已装好 LXD 时跳过安装与初始化 |
 | `--no-image` | 不制作 debian-12-net 镜像 |
-| `--tag v0.02` | 指定下载的 Release 版本 |
+| `--tag v0.03` | 指定下载的 Release 版本 |
 | `--branch main` | 指定拉取的分支 |
 
 示例：
@@ -234,7 +270,7 @@ curl -H "X-User-Username: test" -H "X-User-Password: <api_key>" \
 
 ---
 
-## 九、容器出网自检与一键修复（v0.02）
+## 八、容器出网自检与一键修复（v0.02）
 
 **Docker 共存必读**：Docker 安装后会把 `FORWARD` 默认策略改成 `DROP`，且不覆盖 LXD 网段，导致容器**能到网关但出不了公网**。表现是容器里 `ping 网关` 通、`ping 8.8.8.8` 全丢。
 
@@ -275,13 +311,7 @@ netfilter-persistent save
 
 ---
 
-## 十、版本
-
-- **v0.02** — 新增容器出网自检（`/api/container/network-check`）与管理员一键修复出网（`/api/admin/network/fix-egress`），面板新增「网络与出网」标签页。
-
----
-
-## 十一、用户注册 / 邮箱激活 / 找回密码（v0.03）
+## 九、用户注册 / 邮箱激活 / 找回密码
 
 ### 后台配置 SMTP
 
@@ -316,13 +346,15 @@ netfilter-persistent save
 
 ---
 
-## 十二、版本
+## 版本记录
 
-- **v0.03** — 用户注册 / 邮箱激活 / 找回密码、SMTP 配置与邮件模板、后台邮件服务页面、一键部署脚本。
-
----
-
-## 八、版本
-
+- **v0.03** — 功能完善版：
+  - 安全与账号：密码 bcrypt 存储；用户注册 / 邮箱激活 / 找回密码；SMTP 配置与邮件模板、后台邮件服务页面；用户个人资料自助修改；管理员模拟登录。
+  - 文件管理：SFTP 网页文件管理（11 接口）；容器缺 `sftp-server` 时自动安装；SFTP 令牌按用户名校验归属（修复真实登录用户被误判越权）。
+  - 机房与多节点：机房（Region）管理；镜像/存储池按节点同步与筛选；资源按节点区分（IP 池、NAT、防火墙、反代）；控制台与 SFTP 按容器所属节点端点连接。
+  - 电商一条龙：产品（节点绑定/镜像/库存/多周期价格/限购/设置费/0 元开通）+ 节点管理 + 订单中心 + 易支付（V1 MD5）集成 + 支付回调自动开通容器 + 订单邮件通知（模板 key `mail_order_paid`）；用户商城 `/user/shop`、订单 `/user/orders`；管理侧 `/admin/products`、`/admin/orders`、`/admin/nodes`、`/admin/payment`；公共接口 `GET /api/public/products`、`GET /api/public/pay-status`。
+  - 退款：订单退款事务化（余额与流水同事务、幂等防重复退）。
+  - 营销与客服：优惠券（领取/下单核销）；知识库（公开帮助中心 + 后台维护）；工单双端对话；站内通知定向发送与未读计数一致性修复；工单详情页 ID 读取修复。
+  - 部署：`scripts/install.sh` 默认拉取 v0.03；修复 Docker 共存段在受限环境 `set -e` 静默退出的问题（全部 iptables 操作失败只告警）。
+- **v0.02** — 容器出网自检（`/api/container/network-check`）与管理员一键修复出网（`/api/admin/network/fix-egress`），面板新增「网络与出网」标签页；修复 Docker 抢转发策略导致的容器无法上网；新增一键部署脚本 `scripts/install.sh`。
 - **v0.01** — 首个归档版本：后端 + 前端 + 部署配置，含容器管理、用户与配额、端口映射、Web 终端、重装系统、模板管理。
-- **v0.02** — 容器出网自检 + 管理后台一键修复出网 NAT，修复 Docker 抢转发策略导致的容器无法上网问题；新增一键部署脚本 `scripts/install.sh`。

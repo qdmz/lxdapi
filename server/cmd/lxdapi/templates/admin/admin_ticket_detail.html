@@ -81,7 +81,7 @@ function loadTicket() {
         if (r.code !== 200) { alert(r.msg || '加载失败'); return; }
         var t = r.data.ticket;
         var status = gv(t, 'status', 'Status');
-        document.getElementById('ticketMeta').textContent = '工单 #' + gv(t, 'id', 'ID') + ' · ' + statusBadge(status) + ' · 创建于 ' + fmtTime(gv(t, 'created_at', 'CreatedAt'));
+        document.getElementById('ticketMeta').innerHTML = '工单 #' + esc(gv(t, 'id', 'ID')) + ' · ' + statusBadge(status) + ' · 创建于 ' + esc(fmtTime(gv(t, 'created_at', 'CreatedAt')));
         document.getElementById('ticketTitle').textContent = gv(t, 'title', 'Title');
         document.getElementById('ticketContent').textContent = gv(t, 'content', 'Content');
         document.getElementById('replyBox').style.display = (status === 'closed') ? 'none' : 'block';

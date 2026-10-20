@@ -1,7 +1,6 @@
 package console
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -50,27 +49,31 @@ func CreateSFTPToken(c *gin.Context) {
 			}
 		}
 	} else {
-		userID, _ := c.Get("user_id")
-		var container models.Container
-		var where string
-		var args []interface{}
-		if uid, ok := userID.(uint); ok {
-			where = "name = ? AND user_id = ?"
-			args = append(args, req.Hostname, fmt.Sprint(uid))
-		} else if uname, ok := c.Get("username"); ok {
-			if unameStr, isStr := uname.(string); isStr {
-				where = "name = ? AND user_id = ?"
-				args = append(args, req.Hostname, unameStr)
-			} else {
-				response.Error(c, 401, "缺少用户上下文")
-				return
+		// 容器归属存的是用户名（models.Container.UserID 与站内其它校验一致，
+		// 如 user.GetContainer 用 username 比对），而登录态上下文里的 user_id
+		// 是数字 ID。必须先把当前用户解析为用户名再查，否则真实登录用户
+		// 永远查不到自己的容器（历史 bug：数字 ID 与用户名字段不匹配）。
+		owner := ""
+		if uname, ok := c.Get("username"); ok {
+			if s, isStr := uname.(string); isStr && s != "" {
+				owner = s
 			}
-		} else {
+		}
+		if owner == "" {
+			if uid, ok := c.Get("user_id"); ok {
+				var user models.User
+				if err := db.DB.First(&user, uid).Error; err == nil {
+					owner = user.Username
+				}
+			}
+		}
+		if owner == "" {
 			response.Error(c, 401, "缺少用户上下文")
 			return
 		}
-		if err := db.DB.Where(where, args...).First(&container).Error; err != nil {
-			logger.Warn("SFTP 令牌请求越权: user_id=%s hostname=%s", userID, req.Hostname)
+		var container models.Container
+		if err := db.DB.Where("name = ? AND user_id = ?", req.Hostname, owner).First(&container).Error; err != nil {
+			logger.Warn("SFTP 令牌请求越权: user=%s hostname=%s", owner, req.Hostname)
 			response.Error(c, 403, "无权访问该容器")
 			return
 		}

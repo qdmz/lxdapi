@@ -1080,15 +1080,29 @@
                         if (containerData) {
                             renderContainerInfo(containerData);
                         } else {
-                            showToast('error', '容器不存在');
+                            showContainerLoadError('容器不存在');
                         }
                     } else {
-                        console.error('获取容器信息失败:', result.msg);
+                        showContainerLoadError(result.msg || '获取容器信息失败');
                     }
                 },
-                error: function() {
-                    console.error('获取容器信息失败');
+                error: function(xhr) {
+                    var msg = '获取容器信息失败';
+                    if (xhr.responseJSON && xhr.responseJSON.msg) msg = xhr.responseJSON.msg;
+                    showContainerLoadError(msg);
                 }
+            });
+        }
+
+        // 容器信息加载失败时，把占位符从"加载中..."换成错误提示，避免页面一直转圈
+        function showContainerLoadError(msg) {
+            console.error('获取容器信息失败:', msg);
+            showToast('error', msg);
+            $('#containerImage').text('加载失败');
+            $('#containerStatus').html('<span class="px-2 py-0.5 text-xs font-medium text-red-700 bg-red-100 rounded-full">加载失败</span>');
+            $('#containerHash').text('-');
+            document.querySelectorAll('p.text-center.text-gray-500').forEach(function (el) {
+                if (el.textContent.trim() === '加载中...') el.textContent = '加载失败：' + msg;
             });
         }
 

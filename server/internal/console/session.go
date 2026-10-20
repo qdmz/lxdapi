@@ -36,11 +36,16 @@ var sessionManager = &Manager{
 }
 
 func CreateSession(containerName string, conn *websocket.Conn) (*Session, error) {
+	return CreateSessionWithEndpoint(containerName, lxc.Endpoint{}, conn)
+}
+
+// CreateSessionWithEndpoint 在指定节点的容器上创建控制台会话
+func CreateSessionWithEndpoint(containerName string, endpoint lxc.Endpoint, conn *websocket.Conn) (*Session, error) {
 	sessionID := fmt.Sprintf("%s_%d", containerName, time.Now().Unix())
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	cmd := lxc.ExecCommand(ctx, lxc.Endpoint{}, containerName, "-t", "--env", "TERM=xterm-256color",
+	cmd := lxc.ExecCommand(ctx, endpoint, containerName, "-t", "--env", "TERM=xterm-256color",
 		"--env", "COLORTERM=truecolor",
 		"--", "/bin/sh", "-c", "if [ -x /bin/bash ]; then exec /bin/bash -i; else exec /bin/sh -i; fi")
 

@@ -140,17 +140,22 @@ func respond(netConn net.Conn, req SFTPRequest, resp SFTPResponse) error {
 // container root passwords and works for every container that ships OpenSSH's
 // sftp-server (Ubuntu and Debian images ship it out of the box).
 func HandleSFTP(conn *websocket.Conn, containerName string) error {
+	return HandleSFTPWithEndpoint(conn, containerName, lxc.Endpoint{})
+}
+
+// HandleSFTPWithEndpoint 在指定节点的容器上建立 SFTP 会话
+func HandleSFTPWithEndpoint(conn *websocket.Conn, containerName string, endpoint lxc.Endpoint) error {
 	netConn := newWsConn(conn)
 	defer netConn.Close()
 
-	server, err := resolveSFTPServer(containerName)
+	server, err := resolveSFTPServer(containerName, endpoint)
 	if err != nil {
 		logger.Warn("SFTP %s: %v", containerName, err)
 		sendError(netConn, SFTPRequest{Action: "list"}, err)
 		return err
 	}
 
-	cmd := lxc.ExecCommand(context.Background(), lxc.Endpoint{}, containerName, server)
+	cmd := lxc.ExecCommand(context.Background(), endpoint, containerName, server)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		err = fmt.Errorf("创建 stdin 管道失败: %v", err)
@@ -263,9 +268,9 @@ func HandleSFTP(conn *websocket.Conn, containerName string) error {
 	}
 }
 
-func resolveSFTPServer(containerName string) (string, error) {
+func resolveSFTPServer(containerName string, endpoint lxc.Endpoint) (string, error) {
 	for _, path := range sftpServerPaths {
-		cmd := lxc.ExecCommand(context.Background(), lxc.Endpoint{}, containerName, "test", "-x", path)
+		cmd := lxc.ExecCommand(context.Background(), endpoint, containerName, "test", "-x", path)
 		if cmd.Run() == nil {
 			return path, nil
 		}

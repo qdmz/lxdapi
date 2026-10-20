@@ -38,7 +38,10 @@
                 </h1>
                 <p class="text-sm lg:text-base text-gray-600 mt-1">管理LXD容器镜像模板</p>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2 items-center">
+                <select id="nodeSelector" class="select select-bordered select-sm" onchange="loadTemplates()">
+                    <option value="">全部节点</option>
+                </select>
                 <button onclick="syncTemplates()" class="px-3 py-2 text-xs lg:text-sm font-medium text-gray-700 content-box hover:bg-gray-50 border border-gray-200 rounded-lg transition flex items-center justify-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
@@ -115,16 +118,36 @@
         let pageSize = 25;
         let currentPage = 1;
         let totalPages = 1;
+        let nodeNameMap = {};
 
         $(document).ready(function() {
+            loadNodeSelector();
             loadTemplates();
         });
 
+        function loadNodeSelector() {
+            $.get('/api/admin/nodes', function(r) {
+                if (r.code === 200 && r.data) {
+                    const sel = document.getElementById('nodeSelector');
+                    const current = sel.value;
+                    const list = r.data.nodes || r.data;
+                    nodeNameMap = {};
+                    sel.innerHTML = '<option value="">全部节点</option>' + (Array.isArray(list) ? list.map(n => {
+                        const nid = n.id || n.ID;
+                        nodeNameMap[nid] = n.name;
+                        return `<option value="${nid}">${n.name}</option>`;
+                    }).join('') : '');
+                    if (current) sel.value = current;
+                }
+            });
+        }
+
         function loadTemplates() {
             $('#templatesContent').html('<p class="text-center py-8"><span class="loading loading-spinner loading-md"></span></p>');
-            
+            const nodeId = document.getElementById('nodeSelector').value;
+            const url = '/api/admin/templates' + (nodeId ? `?node_id=${nodeId}` : '');
             $.ajax({
-                url: '/api/admin/templates',
+                url: url,
                 type: 'GET',
                 success: function(result) {
                     if (result.code === 200) {
@@ -192,6 +215,7 @@
                                             <input type="checkbox" id="selectAll" onchange="toggleSelectAll()" class="checkbox checkbox-xs" />
                                         </label>
                                     </th>
+                                    <th class="text-xs text-gray-600">所属节点</th>
                                     <th class="text-xs text-gray-600">别名</th>
                                     <th class="text-xs text-gray-600">指纹</th>
                                     <th class="text-xs text-gray-600">架构</th>
@@ -221,6 +245,7 @@
                 const os = t.os || '-';
                 const release = t.release || '-';
                 const uploadTime = t.uploaded_at ? new Date(t.uploaded_at).toLocaleString('zh-CN') : '-';
+                const nodeName = nodeNameMap[t.node_id] || (t.node_id ? ('节点' + t.node_id) : '本机/全局');
 
                 html += `
                     <tr class="hover">
@@ -229,6 +254,7 @@
                                 <input type="checkbox" class="checkbox checkbox-xs template-checkbox" data-fingerprint="${t.fingerprint}" onchange="updateSelection()" />
                             </label>
                         </td>
+                        <td><span class="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 rounded">${nodeName}</span></td>
                         <td><span class="font-semibold text-gray-800 text-xs">${alias}</span></td>
                         <td><code class="text-xs font-mono text-gray-600">${t.fingerprint.substring(0, 12)}...</code></td>
                         <td><span class="px-2 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded">${t.architecture}</span></td>
@@ -343,8 +369,10 @@
 
             showToast('info', '正在从LXD同步镜像模板...');
 
+            const nodeId = document.getElementById('nodeSelector').value;
+            const url = '/api/admin/templates/sync' + (nodeId ? `?node_id=${nodeId}` : '');
             $.ajax({
-                url: '/api/admin/templates/sync',
+                url: url,
                 type: 'POST',
                 success: function(result) {
                     if (result.code === 200) {

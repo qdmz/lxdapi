@@ -39,7 +39,7 @@ func CreateSFTPToken(c *gin.Context) {
 	// 容器级认证（X-Container-Hash）下校验 hostname 与凭证容器一致；
 	// 用户级认证下校验 hostname 属于该用户；管理员级放行。
 	level, _ := c.Get("auth_level")
-	if lvl, isInt := level.(int); isInt && lvl == int(auth.LevelAdmin) {
+	if lvl, isLevel := level.(auth.APILevel); isLevel && lvl == auth.LevelAdmin {
 		// 管理员可访问任意容器
 	} else if name, ok := c.Get("container_name"); ok {
 		if cname, isStr := name.(string); isStr && cname != "" {
@@ -76,7 +76,7 @@ func CreateSFTPToken(c *gin.Context) {
 		}
 	}
 
-	token, err := console.GenerateToken(req.Hostname)
+	token, err := console.GenerateTokenWithEndpoint(req.Hostname, EndpointForContainer(req.Hostname))
 	if err != nil {
 		response.Error(c, 500, "生成令牌失败")
 		return
@@ -105,7 +105,7 @@ func HandleSFTP(c *gin.Context) {
 		return
 	}
 
-	containerName, valid, msg := console.ValidateToken(token)
+	containerName, endpoint, valid, msg := console.ValidateToken(token)
 	if !valid {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"code": 401,
@@ -130,7 +130,7 @@ func HandleSFTP(c *gin.Context) {
 	// 令牌一次性使用，避免被重放。
 	console.ValidateAndConsume(token)
 
-	if err := console.HandleSFTP(conn, containerName); err != nil {
+	if err := console.HandleSFTPWithEndpoint(conn, containerName, endpoint); err != nil {
 		logger.Error("SFTP 会话异常: %v", err)
 	}
 

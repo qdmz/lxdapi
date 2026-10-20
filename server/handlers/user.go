@@ -28,8 +28,12 @@ func UserDashboard(c *gin.Context) {
 				return
 			}
 		}
+		c.Redirect(http.StatusFound, "/user/login")
+		return
 	}
-	c.Redirect(http.StatusFound, "/user/login")
+	// 无 token 参数时：已通过 UserPageAuth（会话已登录，如模拟登录/正常登录），
+	// 直接进用户首页（容器列表），不要再踢回登录页
+	c.Redirect(http.StatusFound, "/user/containers")
 }
 
 func UserContainers(c *gin.Context) {
@@ -109,5 +113,11 @@ func UserCoupons(c *gin.Context) {
 func UserNotifications(c *gin.Context) {
 	c.HTML(http.StatusOK, "user/user_notifications.html", utils.MergeTemplateData(c, gin.H{
 		"title": "站内消息 - LXD API",
+	}))
+}
+
+func UserProfile(c *gin.Context) {
+	c.HTML(http.StatusOK, "user/user_profile.html", utils.MergeTemplateData(c, gin.H{
+		"title": "个人资料 - LXD API",
 	}))
 }

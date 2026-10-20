@@ -43,6 +43,16 @@
 
     <div id="notifList" class="space-y-3"></div>
 
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 mt-4">
+        <h2 class="text-sm font-bold text-gray-800 mb-3">发送通知给用户</h2>
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+            <input id="sendUserId" type="number" placeholder="用户ID" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 w-28" />
+            <input id="sendTitle" type="text" placeholder="标题" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[160px]" />
+            <input id="sendContent" type="text" placeholder="内容" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[200px]" />
+            <button onclick="sendNotif()" class="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition">发送</button>
+        </div>
+    </div>
+
     <div class="flex items-center justify-between mt-4">
         <div id="pagerInfo" class="text-xs text-gray-500"></div>
         <div class="flex items-center gap-2">
@@ -100,15 +110,58 @@ function renderList(list) {
         return;
     }
     el.innerHTML = list.map(function (n) {
+        var nid = n.id || n.ID;
+        var title = n.title || n.Title || '';
+        var content = n.content || n.Content || '';
+        var type = n.type || n.Type || 'system';
+        var uid = n.user_id || n.UserID || 0;
+        var isRead = (n.is_read !== undefined) ? n.is_read : (n.IsRead || false);
+        var createdAt = n.created_at || n.CreatedAt;
         return '<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">' +
             '<div class="flex items-center justify-between gap-3 mb-2">' +
-            '<span class="font-medium text-gray-800">' + esc(n.title) + '</span>' +
-            '<div class="flex items-center gap-2">' + typeBadge(n.type) +
-            '<span class="text-xs text-gray-400">' + fmtTime(n.created_at) + '</span></div></div>' +
-            '<p class="text-sm text-gray-600 whitespace-pre-wrap mb-2">' + esc(n.content) + '</p>' +
-            '<div class="text-xs text-gray-400">用户ID: ' + n.user_id + (n.is_read ? ' · 已读' : ' · 未读') + '</div>' +
+            '<span class="font-medium text-gray-800">#' + nid + ' ' + esc(title) + '</span>' +
+            '<div class="flex items-center gap-2">' + typeBadge(type) +
+            '<span class="text-xs text-gray-400">' + fmtTime(createdAt) + '</span></div></div>' +
+            '<p class="text-sm text-gray-600 whitespace-pre-wrap mb-2">' + esc(content) + '</p>' +
+            '<div class="flex items-center justify-between"><div class="text-xs text-gray-400">用户ID: ' + uid + (isRead ? ' · 已读' : ' · 未读') + '</div>' +
+            '<button onclick="delNotif(' + nid + ')" class="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition">删除</button></div>' +
             '</div>';
     }).join('');
+}
+
+function delNotif(id) {
+    if (!confirm('确定删除这条通知吗？')) return;
+    $.ajax({
+        url: API + '/notifications/' + id,
+        type: 'DELETE',
+        success: function (r) {
+            if (r.code === 200) { loadNotifs(currentPage); }
+            else { alert(r.msg || '删除失败'); }
+        },
+        error: function () { alert('请求失败'); }
+    });
+}
+
+function sendNotif() {
+    var uid = document.getElementById('sendUserId').value;
+    var title = document.getElementById('sendTitle').value;
+    var content = document.getElementById('sendContent').value;
+    if (!uid || !title || !content) { alert('用户ID、标题、内容都必填'); return; }
+    $.ajax({
+        url: API + '/notifications',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ user_id: parseInt(uid), title: title, content: content, type: 'system' }),
+        success: function (r) {
+            if (r.code === 200) {
+                document.getElementById('sendUserId').value = '';
+                document.getElementById('sendTitle').value = '';
+                document.getElementById('sendContent').value = '';
+                loadNotifs(1);
+            } else { alert(r.msg || '发送失败'); }
+        },
+        error: function () { alert('请求失败'); }
+    });
 }
 
 loadNotifs(1);

@@ -29,7 +29,9 @@ func (s *StorageService) List(nodeID uint) ([]models.StoragePool, error) {
 func (s *StorageService) SyncFromLXD(ctx context.Context, nodeID uint) (int, int, int, error) {
 	logger.Info("开始从LXD同步存储池")
 
-	pools, err := s.lxcClient.ListStoragePools(ctx)
+	// 按节点选择 client：远程节点走 NewRemoteClient
+	client := ClientForNode(nodeID)
+	pools, err := client.ListStoragePools(ctx)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -41,7 +43,7 @@ func (s *StorageService) SyncFromLXD(ctx context.Context, nodeID uint) (int, int
 		lxdPools[p.Name] = true
 
 		var totalSpace, usedSpace int64
-		if res, err := s.lxcClient.GetStoragePoolResources(ctx, p.Name); err == nil {
+		if res, err := client.GetStoragePoolResources(ctx, p.Name); err == nil {
 			totalSpace = res.Space.Total
 			usedSpace = res.Space.Used
 		}

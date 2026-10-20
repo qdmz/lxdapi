@@ -479,6 +479,7 @@ func main() {
 		userPages.GET("/tickets/:id", handlers.UserTicketDetail)
 		userPages.GET("/notifications", handlers.UserNotifications)
 		userPages.GET("/coupons", handlers.UserCoupons)
+		userPages.GET("/profile", handlers.UserProfile)
 	}
 
 	r.GET("/container/login", handlers.ContainerLogin)
@@ -649,12 +650,16 @@ func main() {
 		adminAPI.POST("/tickets/:id/close", notification.AdminCloseTicket)
 		adminAPI.GET("/notifications", notification.AdminGetNotifications)
 		adminAPI.POST("/notifications", notification.AdminCreateNotification)
+		adminAPI.DELETE("/notifications/:id", notification.AdminDeleteNotification)
 	}
 
 	userAPI := r.Group("/api/user")
 	userAPI.Use(middleware.UserAuthOrBasic())
 	{
 		userAPI.GET("/info", user.GetUserInfo)
+		userAPI.GET("/profile", user.GetProfile)
+		userAPI.PUT("/profile", user.UpdateProfile)
+		userAPI.POST("/profile/password", user.ChangePassword)
 		userAPI.POST("/containers", user.CreateContainer)
 		userAPI.GET("/containers", user.ListContainers)
 		userAPI.GET("/containers/:name", user.GetContainer)

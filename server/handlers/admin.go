@@ -167,7 +167,8 @@ func ConsolePage(c *gin.Context) {
 		return
 	}
 
-	containerName, valid, errMsg := console.ValidateToken(token)
+	containerName, _endpoint, valid, errMsg := console.ValidateToken(token)
+	_ = _endpoint
 	if !valid {
 		c.HTML(http.StatusUnauthorized, "error.html", gin.H{
 			"error": errMsg,
@@ -199,7 +200,8 @@ func ConsoleSFTPPage(c *gin.Context) {
 		return
 	}
 
-	containerName, valid, errMsg := console.ValidateToken(token)
+	containerName, _endpoint, valid, errMsg := console.ValidateToken(token)
+	_ = _endpoint
 	if !valid {
 		c.HTML(http.StatusUnauthorized, "error.html", gin.H{
 			"error": errMsg,

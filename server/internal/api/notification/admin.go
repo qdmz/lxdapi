@@ -158,3 +158,12 @@ func AdminCreateNotification(c *gin.Context) {
 	}
 	response.Success(c, notification)
 }
+
+// AdminDeleteNotification 管理员删除通知
+func AdminDeleteNotification(c *gin.Context) {
+	if err := db.DB.Delete(&models.Notification{}, c.Param("id")).Error; err != nil {
+		response.Error(c, 500, "删除失败")
+		return
+	}
+	response.Success(c, "删除成功")
+}

@@ -32,6 +32,7 @@ type User struct {
 
 	// 用户账号体系（注册 / 邮箱激活 / 找回密码）
 	Email         string     `gorm:"size:255;index"`
+	Nickname      string     `gorm:"size:100" json:"nickname"`
 	PasswordHash  string     `gorm:"size:255"`
 	EmailVerified bool       `gorm:"default:false"`
 	ActivateToken string     `gorm:"size:100;index"`

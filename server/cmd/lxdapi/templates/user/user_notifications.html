@@ -88,18 +88,24 @@ function renderList(list) {
         return;
     }
     el.innerHTML = list.map(function (n) {
-        var unread = !n.is_read;
+        var nid = n.id || n.ID;
+        var title = n.title || n.Title || '';
+        var content = n.content || n.Content || '';
+        var ntype = n.type || n.Type || 'system';
+        var relatedType = n.related_type || n.RelatedType;
+        var relatedId = n.related_id || n.RelatedID;
+        var unread = !(n.is_read !== undefined ? n.is_read : (n.IsRead || false));
         var border = unread ? 'border-l-4 border-l-blue-500' : '';
         var badge = unread ? '<span class="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">未读</span>' : '<span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">已读</span>';
-        var link = (n.related_type === 'ticket' && n.related_id) ? ('<a class="text-blue-600 hover:underline text-xs" href="/user/tickets/' + n.related_id + '">查看工单</a>') : '';
+        var link = (relatedType === 'ticket' && relatedId) ? ('<a class="text-blue-600 hover:underline text-xs" href="/user/tickets/' + relatedId + '">查看工单</a>') : '';
         return '<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 ' + border + '">' +
             '<div class="flex items-center justify-between gap-3 mb-2 flex-wrap">' +
-            '<div class="flex items-center gap-2"><span class="font-medium text-gray-800">' + esc(n.title) + '</span>' + badge + '</div>' +
-            '<div class="flex items-center gap-2">' + typeBadge(n.type) +
-            '<span class="text-xs text-gray-400">' + fmtTime(n.created_at) + '</span></div></div>' +
-            '<p class="text-sm text-gray-600 whitespace-pre-wrap mb-2">' + esc(n.content) + '</p>' +
+            '<div class="flex items-center gap-2"><span class="font-medium text-gray-800">' + esc(title) + '</span>' + badge + '</div>' +
+            '<div class="flex items-center gap-2">' + typeBadge(ntype) +
+            '<span class="text-xs text-gray-400">' + fmtTime(n.created_at || n.CreatedAt) + '</span></div></div>' +
+            '<p class="text-sm text-gray-600 whitespace-pre-wrap mb-2">' + esc(content) + '</p>' +
             '<div class="flex items-center justify-between">' + link +
-            (unread ? '<button class="text-xs text-blue-600 hover:underline" onclick="markRead(' + n.id + ')">标记已读</button>' : '') +
+            (unread ? '<button class="text-xs text-blue-600 hover:underline" onclick="markRead(' + nid + ')">标记已读</button>' : '') +
             '</div>' +
             '</div>';
     }).join('');

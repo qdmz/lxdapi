@@ -3,6 +3,9 @@ package console
 import (
 	"encoding/json"
 	"lxdapi/internal/console"
+	"lxdapi/internal/db"
+	"lxdapi/internal/lxc"
+	"lxdapi/models"
 	"lxdapi/pkg/logger"
 	"lxdapi/pkg/response"
 	"net/http"
@@ -10,6 +13,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
+
+// EndpointForContainer 查容器归属节点的 LXD 端点（查不到/本机节点返回空 Endpoint）
+func EndpointForContainer(containerName string) lxc.Endpoint {
+	var container models.Container
+	if err := db.DB.Where("name = ?", containerName).First(&container).Error; err != nil || container.NodeID == 0 {
+		return lxc.Endpoint{}
+	}
+	var node models.Node
+	if err := db.DB.First(&node, container.NodeID).Error; err != nil {
+		return lxc.Endpoint{}
+	}
+	return lxc.NodeEndpoint(node.Host, node.APIPort)
+}
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  8192,
@@ -40,7 +56,7 @@ func CreateToken(c *gin.Context) {
 		return
 	}
 	
-	token, err := console.GenerateToken(req.Hostname)
+	token, err := console.GenerateTokenWithEndpoint(req.Hostname, EndpointForContainer(req.Hostname))
 	if err != nil {
 		response.Error(c, 500, "生成令牌失败")
 		return
@@ -69,7 +85,7 @@ func HandleWebSocket(c *gin.Context) {
 		return
 	}
 	
-	containerName, valid := console.ValidateAndConsume(token)
+	containerName, endpoint, valid := console.ValidateAndConsume(token)
 	if !valid {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"code": 401,
@@ -91,7 +107,7 @@ func HandleWebSocket(c *gin.Context) {
 	}
 	defer conn.Close()
 	
-	session, err := console.CreateSession(containerName, conn)
+	session, err := console.CreateSessionWithEndpoint(containerName, endpoint, conn)
 	if err != nil {
 		logger.Error("创建控制台会话失败: %v", err)
 		conn.WriteMessage(websocket.TextMessage, []byte("错误: "+err.Error()+"\r\n"))

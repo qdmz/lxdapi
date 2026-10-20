@@ -53,8 +53,10 @@ func (s *TemplateService) List(nodeID uint) ([]models.TemplateListResponse, erro
 
 func (s *TemplateService) SyncFromLXD(ctx context.Context, nodeID uint) (int, int, int, error) {
 	logger.Info("开始从LXD同步镜像模板")
-	
-	images, err := s.lxcClient.ListImages(ctx)
+
+	// 按节点选择 client：远程节点走 NewRemoteClient
+	client := ClientForNode(nodeID)
+	images, err := client.ListImages(ctx)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("获取LXD镜像列表失败: %v", err)
 	}

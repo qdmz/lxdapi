@@ -438,7 +438,10 @@ class SFTPUI {
     const frag = document.createDocumentFragment();
     for (const f of files) {
       const isDir = f.type === 'directory';
-      const name = escHtml(f.name);
+      // name 保持原始文件名：data-name/下载/路径拼接都用它；
+      // 仅展示处用 escHtml(name) 转义，防止 HTML 注入。
+      const name = f.name;
+      const dispName = escHtml(f.name);
       const safePath = encodeURIComponent(f.name);
 
       const tr = document.createElement('tr');
@@ -448,8 +451,8 @@ class SFTPUI {
           ? '<svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>'
           : '<svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>'}</td>
         <td class="px-4 lg:px-6 py-2 lg:py-3"><div class="flex items-center gap-2"><input type="checkbox" class="row-check w-4 h-4 flex-shrink-0" data-name="${encodeURIComponent(name)}">${isDir
-          ? `<button class="flex items-center gap-2 text-left hover:text-blue-600 transition-colors" data-action="cd" data-name="${encodeURIComponent(name)}"><span class="font-medium">${name}</span></button>`
-          : `<span class="font-medium">${name}</span>`}</div></td>
+          ? `<button class="flex items-center gap-2 text-left hover:text-blue-600 transition-colors" data-action="cd" data-name="${encodeURIComponent(name)}"><span class="font-medium">${dispName}</span></button>`
+          : `<span class="font-medium">${dispName}</span>`}</div></td>
         <td class="px-4 lg:px-6 py-2 lg:py-3 hidden lg:table-cell text-right tabular-nums">${isDir ? '-' : formatSize(f.size)}</td>
         <td class="px-4 lg:px-6 py-2 lg:py-3 hidden lg:table-cell">${formatDate(f.modTime)}</td>
         <td class="px-4 lg:px-6 py-2 lg:py-3 hidden lg:table-cell">${isDir ? '目录' : f.type === 'link' ? '链接' : '文件'}</td>

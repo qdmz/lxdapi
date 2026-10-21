@@ -1,6 +1,10 @@
 package settings
 
 import (
+	"strings"
+
+	"github.com/gin-gonic/gin"
+
 	"lxdapi/internal/db"
 	"lxdapi/models"
 )
@@ -39,4 +43,27 @@ func CaptchaEnabled() bool { return Get("captcha_enabled", DefaultCaptchaEnabled
 // EmailNotifyEnabled 是否启用邮件通知（关闭时跳过所有出站邮件）
 func EmailNotifyEnabled() bool {
 	return Get("email_notify_enabled", DefaultEmailNotifyOn) == "true"
+}
+
+// SiteURL 管理员配置的站点地址（对外公网地址，如 https://panel.example.com）；
+// 返回时去掉空白与尾部斜杠；为空表示未配置，链接按请求自动拼。
+func SiteURL() string {
+	return strings.TrimRight(strings.TrimSpace(Get("site_url", "")), "/")
+}
+
+// PublicBaseURL 对外访问基地址（无尾部斜杠），用于激活 / 重置 / 支付回调等链接：
+// 优先管理员配置的站点地址，其次反代头 X-Forwarded-Host，最后回退到请求 Host。
+func PublicBaseURL(c *gin.Context) string {
+	if u := SiteURL(); u != "" {
+		return u
+	}
+	scheme := "http"
+	if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	host := c.GetHeader("X-Forwarded-Host")
+	if host == "" {
+		host = c.Request.Host
+	}
+	return scheme + "://" + host
 }

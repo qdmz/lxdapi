@@ -1,6 +1,8 @@
 package admin
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"lxdapi/internal/db"
 	"lxdapi/internal/settings"
@@ -9,21 +11,23 @@ import (
 	"lxdapi/pkg/response"
 )
 
-// GetGeneralSettings 获取通用开关（注册 / 验证码 / 邮件通知）
+// GetGeneralSettings 获取通用开关（注册 / 验证码 / 邮件通知 / 站点地址）
 func GetGeneralSettings(c *gin.Context) {
 	response.Success(c, gin.H{
 		"register_enabled": settings.RegisterEnabled(),
 		"captcha_enabled":  settings.CaptchaEnabled(),
 		"email_notify":     settings.EmailNotifyEnabled(),
+		"site_url":         settings.SiteURL(),
 	})
 }
 
 // SaveGeneralSettings 保存通用开关
 func SaveGeneralSettings(c *gin.Context) {
 	var req struct {
-		RegisterEnabled *bool `json:"register_enabled"`
-		CaptchaEnabled  *bool `json:"captcha_enabled"`
-		EmailNotify     *bool `json:"email_notify"`
+		RegisterEnabled *bool   `json:"register_enabled"`
+		CaptchaEnabled  *bool   `json:"captcha_enabled"`
+		EmailNotify     *bool   `json:"email_notify"`
+		SiteURL         *string `json:"site_url"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, 400, "参数错误: "+err.Error())
@@ -38,10 +42,15 @@ func SaveGeneralSettings(c *gin.Context) {
 	if req.EmailNotify != nil {
 		_ = settings.Set("email_notify_enabled", boolStr(*req.EmailNotify), "general")
 	}
+	if req.SiteURL != nil {
+		// 站点地址允许留空（= 按请求域名自动拼链接）
+		_ = settings.Set("site_url", strings.TrimSpace(*req.SiteURL), "general")
+	}
 	response.Success(c, gin.H{
 		"register_enabled": settings.RegisterEnabled(),
 		"captcha_enabled":  settings.CaptchaEnabled(),
 		"email_notify":     settings.EmailNotifyEnabled(),
+		"site_url":         settings.SiteURL(),
 	})
 }
 

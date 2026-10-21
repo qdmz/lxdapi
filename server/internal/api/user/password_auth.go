@@ -25,11 +25,7 @@ func randomToken(n int) string {
 }
 
 func publicURL(c *gin.Context) string {
-	scheme := "http"
-	if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
-	return scheme + "://" + c.Request.Host
+	return settings.PublicBaseURL(c)
 }
 
 func siteName() string {

@@ -13,6 +13,7 @@ import (
 
 	"lxdapi/internal/db"
 	"lxdapi/internal/service"
+	"lxdapi/internal/settings"
 	"lxdapi/models"
 	"lxdapi/pkg/epay"
 	"lxdapi/pkg/logger"
@@ -21,11 +22,7 @@ import (
 )
 
 func publicBaseURL(c *gin.Context) string {
-	scheme := "http"
-	if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
-	return scheme + "://" + c.Request.Host
+	return settings.PublicBaseURL(c)
 }
 
 func currentUsername(c *gin.Context) (string, *models.User, bool) {

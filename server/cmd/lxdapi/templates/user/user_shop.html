@@ -109,6 +109,13 @@
                     <div class="text-xs text-gray-600 mb-2">计费周期</div>
                     <div class="grid grid-cols-2 gap-2" id="cycleGroup"></div>
                 </div>
+                <div>
+                    <div class="text-xs text-gray-600 mb-2">优惠券 <span class="text-gray-400">（可选）</span></div>
+                    <select id="couponSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">不使用优惠券</option>
+                    </select>
+                    <div id="couponHint" class="hidden text-xs text-emerald-600 mt-1"></div>
+                </div>
                 <div class="flex items-center justify-between">
                     <div class="text-xs text-gray-600">支付方式</div>
                     <div class="flex flex-col gap-1.5" id="payTypeGroup">
@@ -157,6 +164,8 @@ var current = null;
 var currentCycle = 'monthly';
 var payEnabled = false;
 var myBalance = 0;
+var availableCoupons = [];
+var selectedCouponCode = '';
 
 var cycles = [
     { key: 'hourly', label: '时付', field: 'price_hourly', suffix: '/时' },
@@ -286,6 +295,8 @@ function openBuy(id) {
     current = products.filter(function (p) { return p.id == id; })[0];
     if (!current) return;
     currentCycle = 'monthly';
+    selectedCouponCode = '';
+    loadAvailableCoupons();
     document.getElementById('buyTitle').textContent = '购买 ' + current.name;
     document.querySelector('input[name="payType"][value="alipay"]').checked = true;
     document.getElementById('buyBalanceHint').textContent = myBalance.toFixed(2);
@@ -300,11 +311,12 @@ function openBuy(id) {
     var group = document.getElementById('cycleGroup');
     group.innerHTML = cycles.map(function (c) {
         var price = priceOf(current, c.key);
-        var disabled = price <= 0;
+        var disabled = price < 0;
+        var priceLabel = disabled ? '不可购' : (price === 0 ? '免费' : '¥ ' + Number(price).toFixed(2) + c.suffix);
         return '<button data-cycle="' + c.key + '" ' + (disabled ? 'disabled' : '') + ' ' +
             'class="px-3 py-2 text-sm rounded-lg border text-left ' + (disabled ? 'opacity-40 cursor-not-allowed border-gray-200 bg-gray-50' : 'border-gray-200 hover:border-blue-400') + '">' +
             '<div class="font-medium text-gray-800">' + c.label + '</div>' +
-            '<div class="text-xs ' + (disabled ? 'text-gray-400' : 'text-blue-600 font-semibold') + '">' + (disabled ? '不可购' : '¥ ' + Number(price).toFixed(2) + c.suffix) + '</div>' +
+            '<div class="text-xs ' + (disabled ? 'text-gray-400' : 'text-blue-600 font-semibold') + '">' + priceLabel + '</div>' +
             '</button>';
     }).join('');
     group.querySelectorAll('button[data-cycle]').forEach(function (b) {
@@ -320,24 +332,92 @@ function openBuy(id) {
     showEl('buyModal');
 }
 
+function discountText(cp) {
+    if (!cp) return '';
+    if (cp.type === 'percent') {
+        var t = cp.value + '% off';
+        if (cp.max_discount > 0) t += '（最高抵 ¥' + cp.max_discount + '）';
+        return t;
+    }
+    return '¥' + cp.value;
+}
+
+// 预估抵扣（与后端 CreateOrder 口径一致，仅供展示，以后端实际计算为准）
+function estimateDiscount(cp, amount) {
+    if (!cp || !amount || amount <= 0) return 0;
+    if (cp.min_amount > 0 && amount < cp.min_amount) return 0;
+    var d;
+    if (cp.type === 'percent') {
+        d = amount * cp.value / 100;
+        if (cp.max_discount > 0 && d > cp.max_discount) d = cp.max_discount;
+    } else {
+        d = cp.value;
+    }
+    return Math.min(d, amount);
+}
+
+function loadAvailableCoupons() {
+    var sel = document.getElementById('couponSelect');
+    var hint = document.getElementById('couponHint');
+    sel.innerHTML = '<option value="">不使用优惠券</option>';
+    hint.classList.add('hidden');
+    $.get(API + '/coupons/available', function (r) {
+        availableCoupons = (r && r.code === 200 && r.data) ? r.data : [];
+        sel.innerHTML = '<option value="">不使用优惠券</option>' + availableCoupons.map(function (uc) {
+            var cp = uc.coupon || {};
+            return '<option value="' + esc(cp.code) + '">' + esc(cp.name || cp.code) + ' · ' + esc(discountText(cp)) + (cp.min_amount > 0 ? '（满¥' + cp.min_amount + '可用）' : '') + '</option>';
+        }).join('');
+        updateTotal();
+    });
+}
+
 function updateTotal() {
-    document.getElementById('buyTotal').textContent = Number(priceOf(current, currentCycle)).toFixed(2);
+    var price = priceOf(current, currentCycle);
+    var d = 0;
+    var hint = document.getElementById('couponHint');
+    hint.classList.add('hidden');
+    if (selectedCouponCode) {
+        var uc = availableCoupons.filter(function (u) { return (u.coupon || {}).code === selectedCouponCode; })[0];
+        var cp = uc && uc.coupon;
+        d = estimateDiscount(cp, price);
+        if (d > 0) {
+            hint.textContent = '已抵扣 ¥' + d.toFixed(2) + '（' + (cp.name || cp.code) + '）';
+            hint.classList.remove('hidden');
+        } else if (cp && cp.min_amount > 0 && price < cp.min_amount) {
+            hint.textContent = '该券需满 ¥' + cp.min_amount + ' 可用，当前金额未达门槛';
+            hint.classList.remove('hidden');
+        }
+    }
+    document.getElementById('buyTotal').textContent = Number(Math.max(price - d, 0)).toFixed(2);
+}
+
+function finalTotal() {
+    return Number(document.getElementById('buyTotal').textContent) || 0;
 }
 
 function doBuy() {
-    if (!payEnabled && !isBalancePay()) { alert('支付功能未开启，无法下单'); return; }
+    if (finalTotal() > 0 && !payEnabled && !isBalancePay()) { alert('支付功能未开启，无法下单'); return; }
     var btn = document.getElementById('buyBtn');
     btn.disabled = true; btn.textContent = '下单中…';
     $.ajax({
         url: API + '/orders', type: 'POST', contentType: 'application/json',
-        data: JSON.stringify({ product_id: current.id, billing_cycle: currentCycle, quantity: 1, pay_type: currentPayType() }),
+        data: JSON.stringify({ product_id: current.id, billing_cycle: currentCycle, quantity: 1, pay_type: currentPayType(), coupon_code: selectedCouponCode || undefined }),
         success: function (r) {
             if (r.code === 200 && r.data && r.data.order) {
                 closeBuy();
-                if (isBalancePay()) {
-                    payWithBalance(r.data.order);
+                var order = r.data.order;
+                if (Number(order.amount || 0) <= 0) {
+                    // 0元订单：后端已直接标记已支付并触发开通，无需再走支付
+                    document.getElementById('payIcon').setAttribute('data-icon', 'mdi:check-circle');
+                    document.getElementById('payTitle').textContent = '下单成功';
+                    document.getElementById('payDesc').textContent = '免费订单已生效，系统正在为你开通容器…';
+                    document.getElementById('payOpenBtn').classList.add('hidden');
+                    showEl('payModal');
+                    setTimeout(function () { window.location.href = '/user/orders'; }, 1800);
+                } else if (isBalancePay()) {
+                    payWithBalance(order);
                 } else if (r.data.pay_url) {
-                    showPay(r.data.order, r.data.pay_url);
+                    showPay(order, r.data.pay_url);
                 } else {
                     alert('下单成功，请前往订单页完成支付');
                 }
@@ -407,6 +487,11 @@ document.querySelectorAll('.pay-tab').forEach(function (b) {
         b.classList.add('active');
         renderProducts(b.dataset.cat);
     });
+});
+
+document.getElementById('couponSelect').addEventListener('change', function () {
+    selectedCouponCode = this.value;
+    updateTotal();
 });
 
 loadProducts();

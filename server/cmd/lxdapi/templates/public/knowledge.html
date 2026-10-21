@@ -19,7 +19,7 @@
 <div class="flex-1">
 <div class="max-w-4xl mx-auto px-4 py-8">
     <div class="mb-6">
-        <a href="/" class="text-sm text-blue-600 hover:underline">&larr; 返回首页</a>
+        <a id="backLink" href="/" class="text-sm text-blue-600 hover:underline">&larr; 返回首页</a>
         <h1 class="text-2xl font-bold text-gray-800 mt-2">帮助中心</h1>
         <p class="text-sm text-gray-500 mt-1">常见问题与使用文档</p>
     </div>
@@ -88,6 +88,18 @@ function backToList() {
     document.getElementById('articleList').classList.remove('hidden');
     document.getElementById('articleDetail').classList.add('hidden');
 }
+
+// 已登录用户：返回用户面板而非公共首页
+(function () {
+    var a = document.getElementById('backLink');
+    if (!a) return;
+    $.get('/api/user/balance', function (r) {
+        if (r && r.code === 200) {
+            a.href = '/user/containers';
+            a.innerHTML = '&larr; 返回用户面板';
+        }
+    });
+})();
 
 // 支持直接打开详情：/knowledge?id=123
 (function () {

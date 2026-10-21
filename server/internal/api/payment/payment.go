@@ -100,8 +100,8 @@ func CreateOrder(c *gin.Context) {
 	}
 
 	price := cyclePrice(product, req.BillingCycle)
-	if price <= 0 {
-		response.Error(c, 400, "该计费周期不可购买")
+	if price < 0 {
+		response.Error(c, 400, "该计费周期价格配置异常")
 		return
 	}
 
@@ -218,6 +218,22 @@ func CreateOrder(c *gin.Context) {
 		tx.Model(&models.Coupon{}).Where("id = ?", couponID).Update("used_count", gorm.Expr("used_count + 1"))
 	}
 	tx.Commit()
+
+	// 0元订单（免费产品或优惠券全额抵扣）：直接标记已支付并触发自动开通，无需走支付流程
+	if order.Amount <= 0 {
+		now := time.Now()
+		order.Status = "paid"
+		order.TradeNo = "FREE"
+		order.PaidAt = &now
+		db.DB.Save(&order)
+		go func(id uint) {
+			if err := service.ProvisionOrder(id); err != nil {
+				logger.Error("0元订单自动开通失败: %v", err)
+			}
+		}(order.ID)
+		response.Success(c, gin.H{"order": order})
+		return
+	}
 
 	// 余额支付：无需生成第三方支付链接，订单保持 pending，由 pay-with-balance 完成
 	if order.PayType == "balance" {

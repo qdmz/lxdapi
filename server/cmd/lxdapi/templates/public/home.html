@@ -44,7 +44,7 @@
                 <a href="/knowledge" class="hover:text-blue-600 transition">帮助中心</a>
                 <a href="/container/login" class="hover:text-blue-600 transition">容器登录</a>
             </nav>
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-3" id="headerAuth">
                 <a href="/user/login" class="text-sm text-gray-600 hover:text-gray-900 transition">登录</a>
                 <a href="{{if .RegisterEnabled}}/user/register{{else}}/user/login{{end}}"
                    class="text-sm font-medium px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-lg transition shadow">
@@ -267,6 +267,19 @@
 
 <script>
     $(function () {
+        // 已登录：顶部按钮改为进入控制台，开通入口直达用户面板
+        $.get('/api/user/balance', function (r) {
+            if (r && r.code === 200) {
+                var h = document.getElementById('headerAuth');
+                if (h) {
+                    h.innerHTML = '<a href="/user/containers" class="text-sm font-medium px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-lg transition shadow">进入控制台</a>';
+                }
+                document.querySelectorAll('a[href="/user/login"], a[href="/user/register"]').forEach(function (a) {
+                    a.setAttribute('href', '/user/containers');
+                });
+            }
+        });
+
         function fmtPrice(p) {
             var m = p.price_monthly;
             if (m !== null && m !== undefined && m > 0) return String(m);

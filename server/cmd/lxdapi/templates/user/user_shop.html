@@ -180,6 +180,9 @@ function priceOf(p, c) {
 function loadProducts() {
     $.get(PAPI + '/products', function (r) {
         products = (r && r.data) || [];
+        // 后端 gorm.Model 的主键是大写 ID，统一归一化为 id，
+        // 否则下单时 product_id 为 undefined 被 JSON 丢弃，后端报「参数错误」
+        products.forEach(function (p) { p.id = p.id || p.ID; });
         var cat = $('.pay-tab.active').data('cat');
         renderProducts(cat);
     });
@@ -292,7 +295,7 @@ function openBuy(id) {
         current.disk ? '<div>· 磁盘：' + current.disk + ' GB</div>' : '',
         current.bandwidth ? '<div>· 带宽：' + current.bandwidth + ' Mbps</div>' : '',
         current.traffic_limit ? '<div>· 流量：' + current.traffic_limit + ' GB</div>' : '',
-        current.image ? '<div>· 系统：' + esc(current.image) + '</div>' : ''
+        (current.image_name || current.image) ? '<div>· 系统：' + esc(current.image_name || current.image) + '</div>' : ''
     ].filter(Boolean).join('');
     var group = document.getElementById('cycleGroup');
     group.innerHTML = cycles.map(function (c) {

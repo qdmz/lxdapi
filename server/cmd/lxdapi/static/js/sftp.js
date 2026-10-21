@@ -10,6 +10,10 @@ class SFTPClient {
     this.seq = 0;
     // id -> {resolve, reject, timer}
     this.pending = new Map();
+    // id -> {onData, resolve, reject, timer, touch}，下载流专用：
+    // 服务端给 download_data / download_done 都回填了请求 id，且分片的 ok=false，
+    // 不能走 pending 的"首帧即应答"匹配，必须按 id 逐片收集到 done 为止。
+    this.streams = new Map();
     this.pushHandlers = [];
   }
 
@@ -47,12 +51,34 @@ class SFTPClient {
       p.reject(new Error(why));
     }
     this.pending.clear();
+    for (const s of this.streams.values()) {
+      clearTimeout(s.timer);
+      s.reject(new Error(why));
+    }
+    this.streams.clear();
     this.ws = null;
   }
 
   _onMessage(data) {
     let msg;
     try { msg = JSON.parse(data); } catch (e) { return; }
+
+    // 下载流的分片 / 结束 / 错误帧都带请求 id，先于 pending 匹配处理：
+    // 否则第一个 download_data 分片会被误当成 download 请求的应答（ok=false）。
+    if (typeof msg.id === 'number' && this.streams.has(msg.id)) {
+      const s = this.streams.get(msg.id);
+      if (msg.action === 'download_data') {
+        s.touch();
+        if (s.onData) s.onData(msg.data, msg.offset);
+      } else if (msg.action === 'download_done') {
+        this._endStream(msg.id);
+        s.resolve(msg.size);
+      } else if (msg.error) {
+        this._endStream(msg.id);
+        s.reject(new Error(msg.error));
+      }
+      return;
+    }
 
     if (typeof msg.id === 'number') {
       const p = this.pending.get(msg.id);
@@ -199,30 +225,54 @@ class SFTPClient {
     return done.size || uploaded;
   }
 
+  _endStream(id) {
+    const s = this.streams.get(id);
+    if (s) clearTimeout(s.timer);
+    this.streams.delete(id);
+  }
+
+  // Fetches a whole remote file: sends one download request and collects
+  // every download_data frame carrying this request's id until the server
+  // sends download_done (or an error frame). onChunk(base64Data, offset) is
+  // called per chunk; resolves with the total size. Deliberately bypasses
+  // request()/pending: the server echoes the request id on every chunk and
+  // chunk frames have ok=false, which pending matching would misread as the
+  // (failed) reply. An inactivity timer (reset on each chunk) guards hangs,
+  // including the empty-file case where only download_done ever arrives.
+  fetch(path, onChunk) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new Error('未连接到容器'));
+    }
+    const seq = ++this.seq;
+    return new Promise((resolve, reject) => {
+      const s = {
+        onData: onChunk,
+        resolve,
+        reject,
+        timer: null,
+        touch: () => {
+          clearTimeout(s.timer);
+          s.timer = setTimeout(() => {
+            this.streams.delete(seq);
+            reject(new Error('下载超时'));
+          }, 120000);
+        },
+      };
+      s.touch();
+      this.streams.set(seq, s);
+      try {
+        this.ws.send(JSON.stringify({ id: seq, action: 'download', path }));
+      } catch (e) {
+        this._endStream(seq);
+        reject(e);
+      }
+    });
+  }
+
   // Streams a remote file to the caller. onChunk(base64Data, offset) is called
   // for every chunk; the promise resolves with the total size once done.
   async download(path, onChunk) {
-    const start = await this.request('download', { path });
-    if (!start.ok) throw new Error(start.error || '下载失败');
-
-    return new Promise((resolve, reject) => {
-      const handler = (msg) => {
-        if (msg.action === 'download_data') {
-          if (onChunk) onChunk(msg.data, msg.offset);
-        } else if (msg.action === 'download_done') {
-          cleanup();
-          resolve(msg.size);
-        } else if (msg.action === 'download' && msg.error) {
-          cleanup();
-          reject(new Error(msg.error));
-        }
-      };
-      const cleanup = () => {
-        const i = this.pushHandlers.indexOf(handler);
-        if (i >= 0) this.pushHandlers.splice(i, 1);
-      };
-      this.pushHandlers.push(handler);
-    });
+    return this.fetch(path, onChunk);
   }
 
   ping() {
@@ -421,14 +471,14 @@ class SFTPUI {
       const action = btn.dataset.action;
         if (action === 'cd') { this.path = target; this.refresh(); }
         else if (action === 'download') { this.download(target, name); }
-        else if (action === 'edit') { this.edit(target, name); }
+        else if (action === 'edit') { this.edit(target, name).catch((err) => this.toast('打开编辑失败: ' + err.message, 'error')); }
         else if (action === 'delete') { this.confirmDelete(target, name); }
         else if (action === 'more') { this.openRowMenu(btn, target, name, f); }
       });
       if (!isDir) {
         tr.addEventListener('dblclick', (e) => {
           if (e.target.closest('button') || e.target.closest('input')) return;
-          this.edit(this._join(this.path, f.name), f.name);
+          this.edit(this._join(this.path, f.name), f.name).catch((err) => this.toast('打开编辑失败: ' + err.message, 'error'));
         });
       }
       frag.appendChild(tr);
@@ -613,24 +663,22 @@ class SFTPUI {
     this._editState.pathEl.dataset.path = target;
     this._editState.sizeWarn.classList.toggle('hidden', info.size <= 1024 * 1024);
 
-    const chunks = [];
-    let stop;
-    const done = new Promise((resolve, reject) => {
-      stop = this.client.onPush((msg) => {
-        if (msg.action === 'download_data') chunks.push(msg.data);
-        else if (msg.action === 'download_done') { stop(); resolve(); }
-        else if (msg.action === 'download' && msg.error) { stop(); reject(new Error(msg.error)); }
-      });
+    const parts = [];
+    await this.client.fetch(target, (data) => { parts.push(data); });
+
+    // 每片单独 base64 解码成字节再拼接（服务端按 64KiB 独立编码每片，
+    // 直接拼 base64 字符串会在接缝处出错），最后按 UTF-8 解码成文本；
+    // 若用 atob() 的结果按 Latin-1 当文本，中文会乱码。
+    const decoded = parts.map((b64) => {
+      const bin = atob(b64);
+      const u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return u8;
     });
-
-    const resp = await this.client.request('download', { path: target });
-    if (!resp.ok) {
-      stop();
-      throw new Error(resp.error || '读取失败');
-    }
-    await done;
-
-    this._editState.contentEl.value = atob(chunks.join(''));
+    const bytes = new Uint8Array(decoded.reduce((n, u8) => n + u8.length, 0));
+    let off = 0;
+    for (const u8 of decoded) { bytes.set(u8, off); off += u8.length; }
+    this._editState.contentEl.value = new TextDecoder('utf-8').decode(bytes);
     document.getElementById('edit-title').textContent = '编辑: ' + name;
     document.getElementById('edit-modal').classList.remove('hidden');
   }
@@ -715,7 +763,7 @@ class SFTPUI {
     if (isArchive) items.push({ label: '解压到当前目录', fn: () => this.doExtract(target, this.path) });
     if (!isDir) {
       items.unshift({ label: '下载', fn: () => this.download(target, name) });
-      items.unshift({ label: '编辑', fn: () => this.edit(target, name) });
+      items.unshift({ label: '编辑', fn: () => this.edit(target, name).catch((err) => this.toast('打开编辑失败: ' + err.message, 'error')) });
     }
     menu.innerHTML = '';
     for (const it of items) {

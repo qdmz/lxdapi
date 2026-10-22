@@ -31,6 +31,17 @@ type ContainerState struct {
 }
 
 func (c *Client) GetContainerInfo(ctx context.Context, name string) (*ContainerInfo, error) {
+	if c.ep.Remote {
+		rc, err := c.remoteGetContainer(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+		return &ContainerInfo{
+			Name:   rc.Name,
+			Status: mapRemoteStatus(rc.Status),
+			Config: map[string]interface{}{"image.description": rc.Image},
+		}, nil
+	}
 	output, err := c.exec(ctx, "query", fmt.Sprintf("/1.0/instances/%s?recursion=2", name))
 	if err != nil {
 		return nil, fmt.Errorf("获取容器信息失败: %v", err)

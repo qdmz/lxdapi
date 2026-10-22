@@ -10,6 +10,9 @@ import (
 )
 
 func (c *Client) SetContainerMAC(ctx context.Context, name, macAddress, ingress, egress string) error {
+	if c.ep.Remote {
+		return fmt.Errorf("远程节点暂不支持设置 MAC 地址")
+	}
 	if macAddress != "" {
 		logger.Info("为容器设置MAC地址以固定IP: %s -> %s", name, macAddress)
 		_, err := c.exec(ctx, "config", "device", "override", name, "eth0", fmt.Sprintf("hwaddr=%s", macAddress))
@@ -37,6 +40,13 @@ func (c *Client) SetContainerMAC(ctx context.Context, name, macAddress, ingress,
 }
 
 func (c *Client) GetContainerMAC(ctx context.Context, name string) (string, error) {
+	if c.ep.Remote {
+		rc, err := c.remoteGetContainer(ctx, name)
+		if err != nil {
+			return "", err
+		}
+		return rc.MacAddress, nil
+	}
 	info, err := c.GetContainerInfo(ctx, name)
 	if err != nil {
 		return "", err
@@ -61,6 +71,9 @@ func (c *Client) GetContainerMAC(ctx context.Context, name string) (string, erro
 }
 
 func (c *Client) CreateContainerWithConfig(ctx context.Context, name, image, storagePool string, cpu int, memory, disk, ingress, egress string, allowNesting, memorySwap, privileged bool, macAddress, cpuAllowance, ioRead, ioWrite string, processesLimit int) error {
+	if c.ep.Remote {
+		return c.remoteCreateWithConfig(ctx, name, image, cpu, memory, disk, ingress, egress, cpuAllowance, ioRead, ioWrite, allowNesting, memorySwap, privileged, processesLimit)
+	}
 	logger.Info("创建容器: %s, 镜像: %s, 存储池: %s", name, image, storagePool)
 	args := []string{"init", image, name, "-s", storagePool}
 	
@@ -174,10 +187,17 @@ func (c *Client) CreateContainerWithConfig(ctx context.Context, name, image, sto
 }
 
 func (c *Client) CreateContainer(ctx context.Context, name, image string) error {
+	if c.ep.Remote {
+		c.remoteCreate = &RemoteCreateParams{Name: name, Image: image}
+		return c.remoteCreateWithConfig(ctx, name, image, 0, "", "", "", "", "", "", "", false, false, false, 0)
+	}
 	return c.CreateContainerWithConfig(ctx, name, image, "default", 0, "", "", "", "", false, false, false, "", "", "", "", 0)
 }
 
 func (c *Client) StartContainer(ctx context.Context, name string) error {
+	if c.ep.Remote {
+		return c.remoteStart(ctx, name)
+	}
 	logger.Info("启动容器: %s", name)
 	_, err := c.exec(ctx, "start", name)
 	if err != nil {
@@ -188,6 +208,9 @@ func (c *Client) StartContainer(ctx context.Context, name string) error {
 }
 
 func (c *Client) StopContainer(ctx context.Context, name string) error {
+	if c.ep.Remote {
+		return c.remoteStop(ctx, name)
+	}
 	logger.Info("停止容器: %s", name)
 	_, err := c.exec(ctx, "stop", name, "--force")
 	if err != nil {
@@ -198,6 +221,9 @@ func (c *Client) StopContainer(ctx context.Context, name string) error {
 }
 
 func (c *Client) RestartContainer(ctx context.Context, name string) error {
+	if c.ep.Remote {
+		return c.remoteAction(ctx, name, "restart", nil)
+	}
 	logger.Info("重启容器: %s", name)
 	_, err := c.exec(ctx, "restart", name, "--force")
 	if err != nil {
@@ -208,6 +234,9 @@ func (c *Client) RestartContainer(ctx context.Context, name string) error {
 }
 
 func (c *Client) PauseContainer(ctx context.Context, name string) error {
+	if c.ep.Remote {
+		return c.remoteAction(ctx, name, "pause", nil)
+	}
 	logger.Info("暂停容器: %s", name)
 	_, err := c.exec(ctx, "pause", name)
 	if err != nil {
@@ -218,6 +247,9 @@ func (c *Client) PauseContainer(ctx context.Context, name string) error {
 }
 
 func (c *Client) ResumeContainer(ctx context.Context, name string) error {
+	if c.ep.Remote {
+		return c.remoteAction(ctx, name, "resume", nil)
+	}
 	logger.Info("恢复容器: %s", name)
 	_, err := c.exec(ctx, "start", name)
 	if err != nil {
@@ -228,6 +260,9 @@ func (c *Client) ResumeContainer(ctx context.Context, name string) error {
 }
 
 func (c *Client) DeleteContainer(ctx context.Context, name string) error {
+	if c.ep.Remote {
+		return c.remoteDelete(ctx, name)
+	}
 	logger.Info("删除容器: %s", name)
 	
 	if !c.ContainerExists(ctx, name) {
@@ -245,6 +280,9 @@ func (c *Client) DeleteContainer(ctx context.Context, name string) error {
 }
 
 func (c *Client) RebuildContainer(ctx context.Context, name, image string) error {
+	if c.ep.Remote {
+		return c.remoteRebuild(ctx, name, image)
+	}
 	logger.Info("重装容器: %s, 新镜像: %s", name, image)
 	_, err := c.exec(ctx, "rebuild", image, name, "--force")
 	if err != nil {
@@ -255,6 +293,13 @@ func (c *Client) RebuildContainer(ctx context.Context, name, image string) error
 }
 
 func (c *Client) GetContainerStatus(ctx context.Context, name string) (string, error) {
+	if c.ep.Remote {
+		rc, err := c.remoteGetContainer(ctx, name)
+		if err != nil {
+			return "", err
+		}
+		return mapRemoteStatus(rc.Status), nil
+	}
 	type State struct {
 		Status string `json:"status"`
 	}
@@ -270,21 +315,34 @@ func (c *Client) GetContainerStatus(ctx context.Context, name string) (string, e
 }
 
 func (c *Client) ContainerExists(ctx context.Context, name string) bool {
+	if c.ep.Remote {
+		_, err := c.remoteGetContainer(ctx, name)
+		return err == nil
+	}
 	_, err := c.exec(ctx, "info", name)
 	return err == nil
 }
 
 func (c *Client) ExecInContainer(ctx context.Context, name string, cmd []string) (string, error) {
+	if c.ep.Remote {
+		return "", fmt.Errorf("远程节点暂不支持容器内执行命令")
+	}
 	args := append([]string{"exec", name, "--"}, cmd...)
 	return c.exec(ctx, args...)
 }
 
 func (c *Client) SetContainerConfig(ctx context.Context, name, key, value string) error {
+	if c.ep.Remote {
+		return fmt.Errorf("远程节点暂不支持单项配置修改: %s", key)
+	}
 	_, err := c.exec(ctx, "config", "set", name, key, value)
 	return err
 }
 
 func (c *Client) SetRootPassword(ctx context.Context, name, password string) error {
+	if c.ep.Remote {
+		return c.remoteAction(ctx, name, "reset-password", map[string]interface{}{"password": password})
+	}
 	logger.Info("设置容器 %s 的root密码", name)
 	
 	time.Sleep(2 * time.Second)
@@ -301,6 +359,13 @@ func (c *Client) SetRootPassword(ctx context.Context, name, password string) err
 }
 
 func (c *Client) GetContainerIP(ctx context.Context, name string) (string, error) {
+	if c.ep.Remote {
+		rc, err := c.remoteGetContainer(ctx, name)
+		if err != nil {
+			return "", err
+		}
+		return rc.PrivateIP, nil
+	}
 	info, err := c.GetContainerInfo(ctx, name)
 	if err != nil {
 		return "", err
@@ -346,6 +411,9 @@ func isInvalidIPv4(ip string) bool {
 }
 
 func (c *Client) UpdateContainerConfig(ctx context.Context, name string, cpu int, memory, disk, ingress, egress, cpuAllowance, ioRead, ioWrite string, processesLimit int, privileged, memorySwap, allowNesting *bool) error {
+	if c.ep.Remote {
+		return c.remoteUpdateConfig(ctx, name, cpu, memory, disk, ingress, egress, cpuAllowance, ioRead, ioWrite, processesLimit)
+	}
 	logger.Info("更新容器配置: %s", name)
 
 	if cpu > 0 {
@@ -423,6 +491,13 @@ func (c *Client) UpdateContainerConfig(ctx context.Context, name string, cpu int
 
 // GetContainerIPv6 获取容器的内网IPv6地址
 func (c *Client) GetContainerIPv6(ctx context.Context, name string) (string, error) {
+	if c.ep.Remote {
+		rc, err := c.remoteGetContainer(ctx, name)
+		if err != nil {
+			return "", err
+		}
+		return rc.PrivateIPv6, nil
+	}
 	info, err := c.GetContainerInfo(ctx, name)
 	if err != nil {
 		return "", err
@@ -459,6 +534,9 @@ func (c *Client) GetContainerIPv6(ctx context.Context, name string) (string, err
 }
 
 func (c *Client) SetContainerDNS(ctx context.Context, name string, dnsServers []string) error {
+	if c.ep.Remote {
+		return fmt.Errorf("远程节点暂不支持设置 DNS")
+	}
 	if len(dnsServers) == 0 {
 		return fmt.Errorf("DNS服务器列表不能为空")
 	}
@@ -526,6 +604,9 @@ func IsLimitUnsupportedError(err error) bool {
 
 // ClearNICLimits 移除容器 eth0 的带宽限制（limits.ingress / limits.egress）
 func (c *Client) ClearNICLimits(ctx context.Context, name string) error {
+	if c.ep.Remote {
+		return c.remoteClearNICLimits(ctx, name)
+	}
 	for _, key := range []string{"limits.ingress", "limits.egress"} {
 		if _, err := c.exec(ctx, "config", "device", "unset", name, "eth0", key); err != nil {
 			return err
@@ -537,6 +618,10 @@ func (c *Client) ClearNICLimits(ctx context.Context, name string) error {
 // StartContainerWithLimitFallback 启动容器；若因宿主机不支持网卡限速参数而失败，
 // 自动移除该容器的带宽限制后重试，保证容器可用（本次降级为不限速）。
 func (c *Client) StartContainerWithLimitFallback(ctx context.Context, name string) error {
+	if c.ep.Remote {
+		// 远程节点由节点本机执行启动，其本地流程自带限速容错
+		return c.StartContainer(ctx, name)
+	}
 	err := c.StartContainer(ctx, name)
 	if err == nil {
 		return nil

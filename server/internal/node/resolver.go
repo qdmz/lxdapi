@@ -6,9 +6,9 @@ import (
 	"lxdapi/models"
 )
 
-// ClientForNode 根据节点 ID 返回对应 LXD 客户端。
+// ClientForNode 根据节点 ID 返回对应客户端。
 // nodeID==0 或节点 host 为空时返回本机默认客户端（本地 socket）。
-// 远程节点通过 LXD_HOST / LXD_PORT 环境变量按次路由到对应 LXD API。
+// 远程节点返回经节点系统级 API 下发的远程客户端（见 lxc/remote.go）。
 func ClientForNode(nodeID uint) *lxc.Client {
 	if nodeID == 0 {
 		return lxc.NewClient()
@@ -17,7 +17,7 @@ func ClientForNode(nodeID uint) *lxc.Client {
 	if err := db.DB.First(&n, nodeID).Error; err != nil || n.Host == "" {
 		return lxc.NewClient()
 	}
-	return lxc.NewRemoteClient(n.Host, n.APIPort)
+	return lxc.NewRemoteClient(n.Host, n.APIPort, n.APIHash)
 }
 
 // EndpointForNode 返回节点对应的 LXD 接入端点。nodeID==0 或 host 为空为本机。
@@ -29,7 +29,9 @@ func EndpointForNode(nodeID uint) lxc.Endpoint {
 	if err := db.DB.First(&n, nodeID).Error; err != nil || n.Host == "" {
 		return lxc.Endpoint{}
 	}
-	return lxc.NodeEndpoint(n.Host, n.APIPort)
+	ep := lxc.NodeEndpoint(n.Host, n.APIPort)
+	ep.APIHash = n.APIHash
+	return ep
 }
 
 // NodeByName 按容器名归属解析节点：容器名通过订单定位到节点。

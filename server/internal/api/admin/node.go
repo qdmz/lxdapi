@@ -121,17 +121,17 @@ func TestNode(c *gin.Context) {
 		response.Error(c, 404, "节点不存在")
 		return
 	}
-	// 用 lxc info 测试连通性（10秒超时）
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	var client *lxc.Client
+	var err error
 	if node.Host == "" {
-		// 本机节点：用本地 socket
-		client = lxc.NewClient()
+		// 本机节点：用 lxc info 测试连通性
+		err = lxc.NewClient().Info(ctx)
 	} else {
-		client = lxc.NewRemoteClient(node.Host, node.APIPort)
+		// 远程节点：探测节点系统级 API（地址+密钥都对才算在线）
+		err = lxc.PingRemoteNode(ctx, node.Host, node.APIPort, node.APIHash)
 	}
-	if err := client.Info(ctx); err != nil {
+	if err != nil {
 		db.DB.Model(&node).Update("status", "offline")
 		response.Error(c, 400, "节点不可达: "+err.Error())
 		return
@@ -151,7 +151,7 @@ func GetNodeImages(c *gin.Context) {
 	if node.Host == "" {
 		client = lxc.NewClient()
 	} else {
-		client = lxc.NewRemoteClient(node.Host, node.APIPort)
+		client = lxc.NewRemoteClient(node.Host, node.APIPort, node.APIHash)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

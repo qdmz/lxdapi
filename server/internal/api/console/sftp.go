@@ -119,6 +119,16 @@ func HandleSFTP(c *gin.Context) {
 
 	logger.Info("SFTP 连接请求: %s", containerName)
 
+	// 远程节点容器：中继到节点本机处理（容器不在主控本机）
+	if endpoint.Remote {
+		if node := nodeForContainer(containerName); node != nil {
+			// 令牌一次性使用，避免被重放。
+			console.ValidateAndConsume(token)
+			relayToNode(c, node, containerName, "/ws/sftp")
+			return
+		}
+	}
+
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		logger.Error("WebSocket 升级失败: %v", err)

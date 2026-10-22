@@ -16,5 +16,5 @@ func ClientForNode(nodeID uint) *lxc.Client {
 	if err := db.DB.First(&node, nodeID).Error; err != nil || node.Host == "" {
 		return lxc.NewClient()
 	}
-	return lxc.NewRemoteClient(node.Host, node.APIPort)
+	return lxc.NewRemoteClient(node.Host, node.APIPort, node.APIHash)
 }

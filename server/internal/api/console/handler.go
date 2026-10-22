@@ -93,7 +93,15 @@ func HandleWebSocket(c *gin.Context) {
 		})
 		return
 	}
-	
+
+	// 远程节点容器：中继到节点本机处理（容器不在主控本机）
+	if endpoint.Remote {
+		if node := nodeForContainer(containerName); node != nil {
+			relayToNode(c, node, containerName, "/ws/console")
+			return
+		}
+	}
+
 	logger.Info("WebSocket控制台连接请求: %s", containerName)
 	
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)

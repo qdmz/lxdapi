@@ -77,6 +77,26 @@ func (s *ContainerService) Create(ctx context.Context, req *models.CreateContain
 	s.lxcClient = client
 	logger.Info("容器创建路由到节点 %d", req.NodeID)
 
+	if client.IsRemote() {
+		// 远程创建把完整参数（用户名/密码/限额）一次性下发给节点执行：
+		// 密码为空时提前生成，保证主控记录的密码与节点实际设置的密码一致。
+		if req.Password == "" {
+			req.Password = generatePassword()
+		}
+		client.SetRemoteCreate(&lxc.RemoteCreateParams{
+			Name: req.Name, Password: req./**/Password, Image: req.Image,
+			CPU: req.CPU, Memory: req.Memory, Disk: req.Disk,
+			Ingress: req.Ingress, Egress: req.Egress, TrafficLimit: req.TrafficLimit,
+			AllowNesting: req.AllowNesting, MemorySwap: req.MemorySwap, Privileged: req.Privileged,
+			Username: req.Username, Remark: req.Remark,
+			IPv4PoolLimit: req.IPv4PoolLimit, IPv4MappingLimit: req.IPv4MappingLimit,
+			IPv6PoolLimit: req.IPv6PoolLimit, IPv6MappingLimit: req.IPv6MappingLimit,
+			ReverseProxyLimit: req.ReverseProxyLimit,
+			CPUAllowance:      req.CPUAllowance, IORead: req.IORead, IOWrite: req.IOWrite,
+			ProcessesLimit: req.ProcessesLimit,
+		})
+	}
+
 	if s.lxcClient.ContainerExists(ctx, req.Name) {
 		return fmt.Errorf("容器已存在: %s", req.Name)
 	}
@@ -305,7 +325,21 @@ func (s *ContainerService) Create(ctx context.Context, req *models.CreateContain
 	return nil
 }
 
+// routeClientForContainer 按容器归属节点切换客户端：
+// 先看主控容器记录的 node_id，缺失时按订单归属兜底（0/本机则本地客户端）。
+func (s *ContainerService) routeClientForContainer(name string) {
+	nodeID := uint(0)
+	var ct models.Container
+	if err := db.DB.Where("name = ?", name).First(&ct).Error; err == nil && ct.NodeID != 0 {
+		nodeID = ct.NodeID
+	} else {
+		nodeID = node.NodeIDForContainer(name)
+	}
+	s.lxcClient = node.ClientForNode(nodeID)
+}
+
 func (s *ContainerService) Start(ctx context.Context, name string) error {
+	s.routeClientForContainer(name)
 	// 详情页手动启动：限速参数不受宿主机支持时自动去限速后重试，保证能开起来
 	if err := s.lxcClient.StartContainerWithLimitFallback(ctx, name); err != nil {
 		return err
@@ -316,6 +350,7 @@ func (s *ContainerService) Start(ctx context.Context, name string) error {
 }
 
 func (s *ContainerService) Stop(ctx context.Context, name string) error {
+	s.routeClientForContainer(name)
 	if err := s.lxcClient.StopContainer(ctx, name); err != nil {
 		return err
 	}
@@ -325,6 +360,7 @@ func (s *ContainerService) Stop(ctx context.Context, name string) error {
 }
 
 func (s *ContainerService) Restart(ctx context.Context, name string) error {
+	s.routeClientForContainer(name)
 	if err := s.lxcClient.RestartContainer(ctx, name); err != nil {
 		// 重启内部是停+启：若因限速参数不受宿主机支持失败，去限速后重试启动
 		if lxc.IsLimitUnsupportedError(err) {
@@ -346,6 +382,7 @@ func (s *ContainerService) Restart(ctx context.Context, name string) error {
 }
 
 func (s *ContainerService) Pause(ctx context.Context, name string) error {
+	s.routeClientForContainer(name)
 	if err := s.lxcClient.PauseContainer(ctx, name); err != nil {
 		return err
 	}
@@ -355,6 +392,7 @@ func (s *ContainerService) Pause(ctx context.Context, name string) error {
 }
 
 func (s *ContainerService) Resume(ctx context.Context, name string) error {
+	s.routeClientForContainer(name)
 	if err := s.lxcClient.ResumeContainer(ctx, name); err != nil {
 		return err
 	}
@@ -364,6 +402,7 @@ func (s *ContainerService) Resume(ctx context.Context, name string) error {
 }
 
 func (s *ContainerService) Reinstall(ctx context.Context, name, image, password string) error {
+	s.routeClientForContainer(name)
 	var container models.Container
 	if err := db.DB.Where("name = ?", name).First(&container).Error; err != nil {
 		return fmt.Errorf("容器不存在: %v", err)
@@ -516,6 +555,7 @@ func (s *ContainerService) Reinstall(ctx context.Context, name, image, password 
 }
 
 func (s *ContainerService) Delete(ctx context.Context, name string) error {
+	s.routeClientForContainer(name)
 	var container models.Container
 	if err := db.DB.Where("name = ?", name).First(&container).Error; err == nil {
 		var traffic models.Traffic
@@ -586,6 +626,7 @@ func (s *ContainerService) Delete(ctx context.Context, name string) error {
 }
 
 func (s *ContainerService) GetStatus(ctx context.Context, name string) (string, error) {
+	s.routeClientForContainer(name)
 	return s.lxcClient.GetContainerStatus(ctx, name)
 }
 
@@ -622,6 +663,7 @@ func ListContainersByUser(userID string) ([]models.Container, error) {
 }
 
 func (s *ContainerService) ResetPassword(ctx context.Context, name, password string) error {
+	s.routeClientForContainer(name)
 	if !s.lxcClient.ContainerExists(ctx, name) {
 		return fmt.Errorf("容器不存在: %s", name)
 	}
@@ -642,6 +684,7 @@ func GetContainerFromCache(name string) (interface{}, bool) {
 }
 
 func (s *ContainerService) GetInfo(ctx context.Context, name string) (map[string]interface{}, error) {
+	s.routeClientForContainer(name)
 	info, err := s.lxcClient.GetContainerInfo(ctx, name)
 	if err != nil {
 		return nil, err
@@ -989,6 +1032,7 @@ func formatBytes(bytes uint64) string {
 }
 
 func (s *ContainerService) UpdateConfig(ctx context.Context, name string, req *models.UpdateContainerConfigRequest) ([]string, error) {
+	s.routeClientForContainer(name)
 	container, err := s.Get(name)
 	if err != nil {
 		return nil, fmt.Errorf("容器不存在: %s", name)

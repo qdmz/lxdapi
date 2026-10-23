@@ -149,6 +149,11 @@ function renderOrders(list) {
     tbody.innerHTML = list.map(function (o) {
         var spec = o.cpu + 'C / ' + o.memory + 'M / ' + o.disk + 'G';
         var node = o.node_name || '-';
+        var pinfo = '';
+        if (o.product_info) {
+            var pi = o.product_info;
+            pinfo = '<div class="text-xs text-gray-400">库存 ' + (pi.stock < 0 ? '不限' : pi.stock) + ' · 限购 ' + (pi.max_per_user > 0 ? pi.max_per_user : '不限') + ' · 时¥' + (pi.price_hourly || 0) + ' 月¥' + (pi.price_monthly || 0) + ' 季¥' + (pi.price_quarterly || 0) + ' 年¥' + (pi.price_yearly || 0) + '</div>';
+        }
         var acts = [];
         if (o.status === 'pending') {
             acts.push('<button class="text-green-600 hover:underline text-sm mr-2" onclick="markPaid(' + (o.id || o.ID) + ')">标记支付</button>');
@@ -162,7 +167,7 @@ function renderOrders(list) {
         return '<tr class="border-t border-gray-100 hover:bg-gray-50">' +
             '<td class="px-4 py-3 font-mono text-xs text-gray-700">' + esc(o.order_no) + '</td>' +
             '<td class="px-4 py-3 text-gray-600">' + esc(o.username) + '</td>' +
-            '<td class="px-4 py-3 text-gray-600">' + esc(o.product_name) + ' <span class="text-gray-400">·</span> ' + esc(node) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + esc(o.product_name) + ' <span class="text-gray-400">·</span> ' + esc(node) + pinfo + '</td>' +
             '<td class="px-4 py-3 text-gray-600">' + esc(spec) + ' × ' + o.quantity + '</td>' +
             '<td class="px-4 py-3 font-medium text-gray-800">¥ ' + Number(o.amount || 0).toFixed(2) + '</td>' +
             '<td class="px-4 py-3">' + statusBadge(o.status) + '</td>' +
@@ -190,6 +195,7 @@ function detail(id) {
             row('计费周期', esc(o.billing_cycle)) +
             row('数量', o.quantity) +
             row('金额', '¥ ' + Number(o.amount || 0).toFixed(2)) +
+            (o.product_info ? row('产品库存', o.product_info.stock < 0 ? '不限' : o.product_info.stock) + row('产品限购', o.product_info.max_per_user > 0 ? o.product_info.max_per_user : '不限') + row('产品价格', '时 ¥' + (o.product_info.price_hourly || 0) + ' / 月 ¥' + (o.product_info.price_monthly || 0) + ' / 季 ¥' + (o.product_info.price_quarterly || 0) + ' / 年 ¥' + (o.product_info.price_yearly || 0)) : '') +
             row('支付类型', esc(o.pay_type || '-')) +
             row('交易流水', esc(o.trade_no || '-')) +
             row('状态', statusBadge(o.status)) +

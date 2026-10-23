@@ -74,6 +74,11 @@ func UpdateProduct(c *gin.Context) {
 	product.PriceYearly = input.PriceYearly
 	product.MaxContainers = input.MaxContainers
 	product.AllowNesting = input.AllowNesting
+	product.Privileged = input.Privileged
+	product.MemorySwap = input.MemorySwap
+	product.MaxPerUser = input.MaxPerUser
+	product.AllowFree = input.AllowFree
+	product.SetupFee = input.SetupFee
 	product.AllowPortForward = input.AllowPortForward
 	product.AllowDomainBinding = input.AllowDomainBinding
 	product.AllowSFTP = input.AllowSFTP

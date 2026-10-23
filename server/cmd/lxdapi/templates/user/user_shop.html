@@ -263,6 +263,7 @@ function renderProducts(cat) {
     if (!list.length) { grid.innerHTML = ''; return; }
     grid.innerHTML = list.map(function (p) {
         var badge = p.stock >= 0 ? '<span class="text-xs px-2 py-0.5 rounded bg-' + (p.stock === 0 ? 'red-100 text-red-600' : 'gray-100 text-gray-500') + '">' + (p.stock === 0 ? '售罄' : '库存 ' + p.stock) + '</span>' : '';
+        if (p.max_per_user > 0) badge += ' <span class="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-500">限购 ' + p.max_per_user + '</span>';
         var node = p.node_name ? '<span class="text-xs text-gray-400">' + esc(p.node_name) + (p.node_region ? ' · ' + esc(p.node_region) : '') + '</span>' : '';
         var minPrice = Math.min.apply(null, cycles.map(function (c) { return priceOf(p, c.key); }).filter(function (v) { return v > 0; }).concat([99999]));
         var spec = [

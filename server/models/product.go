@@ -32,6 +32,8 @@ type Product struct {
 	// 高级配置
 	MaxContainers      int  `gorm:"default:0" json:"max_containers"`
 	AllowNesting       bool `gorm:"default:false" json:"allow_nesting"`
+	Privileged         bool `gorm:"default:false" json:"privileged"`  // 开通时是否使用特权容器
+	MemorySwap         bool `gorm:"default:false" json:"memory_swap"` // 开通时是否允许使用 SWAP
 	AllowPortForward   bool `gorm:"default:false" json:"allow_port_forward"`
 	AllowDomainBinding bool `gorm:"default:false" json:"allow_domain_binding"`
 	AllowSFTP          bool `gorm:"default:false" json:"allow_sftp"`

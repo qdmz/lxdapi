@@ -37,13 +37,15 @@
                                 <th>CPU</th>
                                 <th>内存</th>
                                 <th>磁盘</th>
-                                <th>价格/月</th>
+                                <th>价格（时/月/季/年）</th>
+                                <th>库存</th>
+                                <th>限购</th>
                                 <th>状态</th>
                                 <th>操作</th>
                             </tr>
                         </thead>
                         <tbody id="productTable">
-                            <tr><td colspan="9"><div class="text-center py-4">加载中...</div></td></tr>
+                            <tr><td colspan="11"><div class="text-center py-4">加载中...</div></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -154,10 +156,22 @@
                             <input type="number" id="productMaxContainers" value="0" class="input input-bordered">
                         </label>
                     </div>
-                    <div class="form-control col-span-2">
-                        <label class="label cursor-pointer">
+                    <div class="form-control">
+                        <label class="label cursor-pointer justify-start gap-3">
                             <input type="checkbox" id="productAllowNesting" class="checkbox checkbox-primary">
                             <span class="label-text">允许嵌套虚拟化</span>
+                        </label>
+                    </div>
+                    <div class="form-control">
+                        <label class="label cursor-pointer justify-start gap-3">
+                            <input type="checkbox" id="productPrivileged" class="checkbox checkbox-primary">
+                            <span class="label-text">开通特权容器</span>
+                        </label>
+                    </div>
+                    <div class="form-control">
+                        <label class="label cursor-pointer justify-start gap-3">
+                            <input type="checkbox" id="productMemorySwap" class="checkbox checkbox-primary">
+                            <span class="label-text">允许使用 SWAP</span>
                         </label>
                     </div>
                 </div>
@@ -233,7 +247,7 @@
         function renderProducts(products) {
             const tbody = document.getElementById('productTable');
             if (products.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9"><div class="text-center py-4">暂无产品</div></td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11"><div class="text-center py-4">暂无产品</div></td></tr>';
                 return;
             }
             tbody.innerHTML = products.map(p => `
@@ -244,7 +258,9 @@
                     <td>${p.cpu || '-'}</td>
                     <td>${p.memory ? p.memory + ' MB' : '-'}</td>
                     <td>${p.disk ? p.disk + ' GB' : '-'}</td>
-                    <td>¥${p.price_monthly || 0}/月</td>
+                    <td class="text-xs leading-5">时 ¥${p.price_hourly || 0}<br>月 ¥${p.price_monthly || 0}<br>季 ¥${p.price_quarterly || 0}<br>年 ¥${p.price_yearly || 0}</td>
+                    <td>${p.stock == null || p.stock < 0 ? '不限' : p.stock}</td>
+                    <td>${p.max_per_user > 0 ? p.max_per_user : '不限'}</td>
                     <td><span class="badge ${p.status === 'active' ? 'badge-success' : 'badge-ghost'}">${p.status === 'active' ? '启用' : '禁用'}</span></td>
                     <td>
                         <button class="btn btn-ghost btn-sm" onclick="editProduct(${p.id || p.ID})">编辑</button>
@@ -299,6 +315,8 @@
                         document.getElementById('productStatus').value = data.data.status;
                         document.getElementById('productMaxContainers').value = data.data.max_containers;
                         document.getElementById('productAllowNesting').checked = data.data.allow_nesting;
+                        document.getElementById('productPrivileged').checked = !!data.data.privileged;
+                        document.getElementById('productMemorySwap').checked = !!data.data.memory_swap;
                         document.getElementById('productModal').showModal();
                     }
                 });
@@ -333,6 +351,8 @@
                 status: document.getElementById('productStatus').value,
                 max_containers: parseInt(document.getElementById('productMaxContainers').value),
                 allow_nesting: document.getElementById('productAllowNesting').checked,
+                privileged: document.getElementById('productPrivileged').checked,
+                memory_swap: document.getElementById('productMemorySwap').checked,
             };
 
             try {

@@ -19,6 +19,29 @@ func atoiDefault(s string, def int) int {
 	return n
 }
 
+// orderListItem 订单 + 附带的产品展示信息（库存/限购/各周期价格）
+type orderListItem struct {
+	models.Order
+	ProductInfo *service.OrderProductInfo `json:"product_info"`
+}
+
+func wrapOrders(orders []models.Order) []orderListItem {
+	ids := make([]uint, 0, len(orders))
+	seen := make(map[uint]bool)
+	for _, o := range orders {
+		if o.ProductID != 0 && !seen[o.ProductID] {
+			seen[o.ProductID] = true
+			ids = append(ids, o.ProductID)
+		}
+	}
+	infos := service.ProductInfoMap(ids)
+	items := make([]orderListItem, 0, len(orders))
+	for _, o := range orders {
+		items = append(items, orderListItem{Order: o, ProductInfo: infos[o.ProductID]})
+	}
+	return items
+}
+
 // GetOrderList 订单列表
 func GetOrderList(c *gin.Context) {
 	query := db.DB.Model(&models.Order{})
@@ -47,7 +70,7 @@ func GetOrderList(c *gin.Context) {
 		response.Error(c, 500, "获取订单列表失败")
 		return
 	}
-	response.Success(c, gin.H{"list": orders, "total": total, "page": page, "page_size": size})
+	response.Success(c, gin.H{"list": wrapOrders(orders), "total": total, "page": page, "page_size": size})
 }
 
 // GetOrderDetail 订单详情
@@ -57,7 +80,7 @@ func GetOrderDetail(c *gin.Context) {
 		response.Error(c, 404, "订单不存在")
 		return
 	}
-	response.Success(c, order)
+	response.Success(c, wrapOrders([]models.Order{order})[0])
 }
 
 // MarkOrderPaid 手动标记已支付并开通

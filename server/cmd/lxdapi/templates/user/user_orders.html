@@ -123,6 +123,11 @@ function loadOrders() {
         tbody.innerHTML = list.map(function (o) {
             detailCache[o.order_no] = o;
             var spec = o.cpu + 'C / ' + o.memory + 'M / ' + o.disk + 'G';
+            var pinfo = '';
+            if (o.product_info) {
+                var pi = o.product_info;
+                pinfo = '<div class="text-xs text-gray-400">库存 ' + (pi.stock < 0 ? '不限' : pi.stock) + ' · 限购 ' + (pi.max_per_user > 0 ? pi.max_per_user : '不限') + ' · 时¥' + (pi.price_hourly || 0) + ' 月¥' + (pi.price_monthly || 0) + ' 季¥' + (pi.price_quarterly || 0) + ' 年¥' + (pi.price_yearly || 0) + '</div>';
+            }
             var acts = [];
             if (o.status === 'pending') {
                 acts.push('<button class="text-blue-600 hover:underline text-sm" onclick="payOrder(\'' + esc(o.order_no) + '\')">去支付</button>');
@@ -139,7 +144,7 @@ function loadOrders() {
             }
             return '<tr class="order-row border-t border-gray-100">' +
                 '<td class="px-4 py-3 font-mono text-xs text-gray-700">' + esc(o.order_no) + '</td>' +
-                '<td class="px-4 py-3 text-gray-700">' + esc(o.product_name) + (o.node_name ? ' <span class="text-gray-400 text-xs">(' + esc(o.node_name) + ')</span>' : '') + '</td>' +
+                '<td class="px-4 py-3 text-gray-700">' + esc(o.product_name) + (o.node_name ? ' <span class="text-gray-400 text-xs">(' + esc(o.node_name) + ')</span>' : '') + pinfo + '</td>' +
                 '<td class="px-4 py-3 text-gray-600">' + esc(spec) + ' × ' + o.quantity + '</td>' +
                 '<td class="px-4 py-3 font-medium text-gray-800">¥ ' + Number(o.amount || 0).toFixed(2) + '</td>' +
                 '<td class="px-4 py-3">' + statusBadge(o.status) + '</td>' +
@@ -238,6 +243,11 @@ function showDetail(orderNo) {
         ['开通容器', o.container_name ? '<span class="font-mono">' + esc(o.container_name) + '</span>' : '-'],
         ['到期时间', fmtTime(o.expire_at)]
     ];
+    if (o.product_info) {
+        rows.push(['产品库存', o.product_info.stock < 0 ? '不限' : '' + o.product_info.stock]);
+        rows.push(['产品限购', o.product_info.max_per_user > 0 ? '' + o.product_info.max_per_user : '不限']);
+        rows.push(['产品价格', '时 ¥' + (o.product_info.price_hourly || 0) + ' / 月 ¥' + (o.product_info.price_monthly || 0) + ' / 季 ¥' + (o.product_info.price_quarterly || 0) + ' / 年 ¥' + (o.product_info.price_yearly || 0)]);
+    }
     if (o.provision_status && o.provision_status !== 'none') rows.push(['开通状态', o.provision_status]);
     if (o.provision_error) rows.push(['失败原因', '<span class="text-red-600">' + esc(o.provision_error) + '</span>']);
     document.getElementById('detailBody').innerHTML = '<div class="space-y-2 text-sm">' + rows.map(function (row) {

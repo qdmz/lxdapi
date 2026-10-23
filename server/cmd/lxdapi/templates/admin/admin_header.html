@@ -210,9 +210,9 @@
             </div>
 
             <div class="flex items-center space-x-2 md:space-x-3">
-                <div class="nav-username flex items-center space-x-2 text-gray-700 bg-gray-50 px-2 md:px-3 py-2 rounded-lg smooth-transition hover:bg-gray-100">
+                <div class="nav-username flex items-center space-x-2 text-gray-700 bg-gray-50 px-2 md:px-3 py-2 rounded-lg smooth-transition hover:bg-gray-100 cursor-pointer" onclick="openAccountSettings()" title="账号设置">
                     <span class="iconify text-gray-500" data-icon="mdi:account-circle" data-width="18"></span>
-                    <span class="text-sm font-medium">{{.username}}</span>
+                    <span class="text-sm font-medium admin-username-display">{{.username}}</span>
                 </div>
                 <a href="/admin/logout" class="hidden md:flex bg-red-500 hover:bg-red-600 text-white px-3 md:px-4 py-2 rounded-lg text-sm font-medium btn-hover shadow-sm items-center gap-2">
                     <span class="iconify" data-icon="mdi:logout" data-width="16"></span>
@@ -355,6 +355,10 @@
                     </div>
                 </div>
                 <div class="border-t border-gray-100 mt-2 pt-2">
+                    <a href="javascript:void(0)" onclick="openAccountSettings()" class="flex items-center gap-3 text-gray-700 hover:text-blue-600 hover:bg-blue-50 px-4 py-3 rounded-lg text-sm font-medium smooth-transition">
+                        <span class="iconify" data-icon="mdi:account-cog-outline" data-width="20"></span>
+                        账号设置
+                    </a>
                     <a href="/admin/logout" class="flex items-center gap-3 text-red-600 hover:bg-red-50 px-4 py-3 rounded-lg text-sm font-medium smooth-transition">
                         <span class="iconify" data-icon="mdi:logout" data-width="20"></span>
                         退出登录
@@ -365,7 +369,118 @@
     </div>
 </nav>
 
+<!-- 账号设置弹窗：修改管理员用户名 / 密码 -->
+<div id="accountSettingsModal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black bg-opacity-50 px-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <h3 class="text-base font-semibold text-gray-800 flex items-center gap-2">
+                <span class="iconify text-blue-600" data-icon="mdi:account-cog-outline" data-width="20"></span>
+                账号设置
+            </h3>
+            <button type="button" onclick="closeAccountSettings()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <div class="px-6 py-5 space-y-6">
+            <div>
+                <div class="text-sm font-medium text-gray-700 mb-3">登录用户名</div>
+                <div class="flex gap-2">
+                    <input id="acctUsername" type="text" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="用户名">
+                    <button type="button" onclick="saveAdminUsername()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">保存</button>
+                </div>
+            </div>
+            <div class="border-t border-gray-100 pt-5">
+                <div class="text-sm font-medium text-gray-700 mb-3">修改密码</div>
+                <div class="space-y-3">
+                    <input id="acctOldPwd" type="password" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="当前密码" autocomplete="current-password">
+                    <input id="acctNewPwd" type="password" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="新密码（至少 6 位）" autocomplete="new-password">
+                    <input id="acctConfirmPwd" type="password" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="再次输入新密码" autocomplete="new-password">
+                    <button type="button" onclick="changeAdminPassword()" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">修改密码</button>
+                    <p class="text-xs text-gray-400">修改后立即生效，下次登录请使用新密码。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+    function openAccountSettings() {
+        var modal = document.getElementById('accountSettingsModal');
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        fetch('/api/admin/profile')
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (res.code === 200 && res.data) {
+                    document.getElementById('acctUsername').value = res.data.username || '';
+                }
+            })
+            .catch(function() {});
+    }
+
+    function closeAccountSettings() {
+        var modal = document.getElementById('accountSettingsModal');
+        if (!modal) return;
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        ['acctOldPwd', 'acctNewPwd', 'acctConfirmPwd'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+    }
+
+    function saveAdminUsername() {
+        var username = document.getElementById('acctUsername').value.trim();
+        if (!username) { showToast('error', '用户名不能为空'); return; }
+        fetch('/api/admin/profile', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({username: username})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (res.code === 200) {
+                document.querySelectorAll('.admin-username-display').forEach(function(el) { el.textContent = username; });
+                showToast('success', '用户名修改成功');
+            } else {
+                showToast('error', res.msg || '保存失败');
+            }
+        })
+        .catch(function() { showToast('error', '网络错误，请重试'); });
+    }
+
+    function changeAdminPassword() {
+        var oldPwd = document.getElementById('acctOldPwd').value;
+        var newPwd = document.getElementById('acctNewPwd').value;
+        var confirmPwd = document.getElementById('acctConfirmPwd').value;
+        if (!oldPwd) { showToast('error', '请输入当前密码'); return; }
+        if (newPwd.length < 6) { showToast('error', '新密码至少 6 位'); return; }
+        if (newPwd !== confirmPwd) { showToast('error', '两次输入的新密码不一致'); return; }
+        fetch('/api/admin/profile/password', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({old_password: oldPwd, new_password: newPwd})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (res.code === 200) {
+                showToast('success', '密码修改成功，下次登录请使用新密码');
+                closeAccountSettings();
+            } else {
+                showToast('error', res.msg || '修改失败');
+            }
+        })
+        .catch(function() { showToast('error', '网络错误，请重试'); });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        var acctModal = document.getElementById('accountSettingsModal');
+        if (acctModal) {
+            acctModal.addEventListener('click', function(e) {
+                if (e.target === acctModal) closeAccountSettings();
+            });
+        }
+    });
+
     function toggleMobileDropdown(btn) {
         const content = btn.nextElementSibling;
         const chevron = btn.querySelector('.chevron-icon');

@@ -1,8 +1,12 @@
 package core
 
 import (
-	"gopkg.in/yaml.v3"
+	"fmt"
 	"os"
+	"path/filepath"
+	"sync"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -119,11 +123,62 @@ type AdminConfig struct {
 
 var GlobalConfig *Config
 
+// configPath 记录 LoadConfig 实际加载的配置文件路径，供 SaveConfig 写回。
+var configPath string
+
+// configMu 保护配置文件的并发读写（管理员自助改名/改密时使用）。
+var configMu sync.Mutex
+
 func LoadConfig(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
 	GlobalConfig = &Config{}
-	return yaml.Unmarshal(data, GlobalConfig)
+	if err := yaml.Unmarshal(data, GlobalConfig); err != nil {
+		return err
+	}
+	configPath = path
+	return nil
+}
+
+// saveConfigLocked 将当前 GlobalConfig 写回配置文件（调用方须持有 configMu）。
+// 采用临时文件 + rename 的原子替换，避免写一半损坏配置导致管理员无法登录。
+func saveConfigLocked() error {
+	if configPath == "" {
+		return fmt.Errorf("配置路径未初始化")
+	}
+	data, err := yaml.Marshal(GlobalConfig)
+	if err != nil {
+		return err
+	}
+	tmp := filepath.Join(filepath.Dir(configPath), ".config.yaml.tmp")
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, configPath)
+}
+
+// SaveConfig 将当前内存配置持久化到配置文件。
+func SaveConfig() error {
+	configMu.Lock()
+	defer configMu.Unlock()
+	return saveConfigLocked()
+}
+
+// UpdateAdminCredentials 修改管理员用户名和/或密码（空字符串表示不改该项），
+// 并立即写回配置文件，重启后仍然生效。
+func UpdateAdminCredentials(username, password string) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+	if GlobalConfig == nil {
+		return fmt.Errorf("配置未加载")
+	}
+	if username != "" {
+		GlobalConfig.Admin.Username = username
+	}
+	if password != "" {
+		GlobalConfig.Admin.Password = password
+	}
+	return saveConfigLocked()
 }

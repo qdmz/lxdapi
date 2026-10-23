@@ -523,6 +523,9 @@ func main() {
 	{
 		adminAPI.GET("/dashboard", admin.GetDashboard)
 		adminAPI.GET("/host/stats", admin.GetHostStats)
+		adminAPI.GET("/profile", admin.GetAdminProfile)
+		adminAPI.PUT("/profile", admin.UpdateAdminProfile)
+		adminAPI.POST("/profile/password", admin.ChangeAdminPassword)
 		adminAPI.GET("/containers", admin.ListContainers)
 		adminAPI.GET("/containers/:name", admin.GetContainer)
 		adminAPI.DELETE("/containers/:name", admin.DeleteContainer)

@@ -410,6 +410,29 @@ func Return(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/user/orders?paid="+orderNo)
 }
 
+// orderWithProduct 订单 + 附带的产品展示信息（库存/限购/各周期价格）
+type orderWithProduct struct {
+	models.Order
+	ProductInfo *service.OrderProductInfo `json:"product_info"`
+}
+
+func wrapOrdersWithProduct(orders []models.Order) []orderWithProduct {
+	ids := make([]uint, 0, len(orders))
+	seen := make(map[uint]bool)
+	for _, o := range orders {
+		if o.ProductID != 0 && !seen[o.ProductID] {
+			seen[o.ProductID] = true
+			ids = append(ids, o.ProductID)
+		}
+	}
+	infos := service.ProductInfoMap(ids)
+	items := make([]orderWithProduct, 0, len(orders))
+	for _, o := range orders {
+		items = append(items, orderWithProduct{Order: o, ProductInfo: infos[o.ProductID]})
+	}
+	return items
+}
+
 // GetOrders 用户订单列表
 func GetOrders(c *gin.Context) {
 	_, user, ok := currentUsername(c)
@@ -421,7 +444,7 @@ func GetOrders(c *gin.Context) {
 		response.Error(c, 500, "获取订单列表失败")
 		return
 	}
-	response.Success(c, orders)
+	response.Success(c, wrapOrdersWithProduct(orders))
 }
 
 // GetOrder 单个订单
@@ -436,7 +459,7 @@ func GetOrder(c *gin.Context) {
 		response.Error(c, 404, "订单不存在")
 		return
 	}
-	response.Success(c, order)
+	response.Success(c, wrapOrdersWithProduct([]models.Order{order})[0])
 }
 
 // RepayOrder 重新获取支付地址

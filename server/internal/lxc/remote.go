@@ -218,7 +218,9 @@ func (c *Client) remoteCreateWithConfig(ctx context.Context, name, image string,
 	if err := c.remoteDo(ctx, "POST", "/api/system/containers", p, nil); err != nil {
 		return err
 	}
-	_, err := c.remoteWaitContainer(ctx, p.Name, 240*time.Second)
+	// 等待窗须覆盖节点侧完整建容器耗时：慢节点（如 1 核小机器）实测可达 7 分钟，
+	// 与节点 task timeout（900s）对齐，避免节点还在建、主控先判失败。
+	_, err := c.remoteWaitContainer(ctx, p.Name, 900*time.Second)
 	return err
 }
 
@@ -266,9 +268,9 @@ func (c *Client) remoteRebuild(ctx context.Context, name, image string) error {
 	if err := c.remoteAction(ctx, name, "reinstall", map[string]interface{}{"image": image}); err != nil {
 		return err
 	}
-	// 节点重装为异步任务：给足时间并确认容器恢复可查询
+	// 节点重装为异步任务：给足时间并确认容器恢复可查询（慢节点同创建一样放宽到 900s）
 	time.Sleep(10 * time.Second)
-	_, err := c.remoteWaitContainer(ctx, name, 240*time.Second)
+	_, err := c.remoteWaitContainer(ctx, name, 900*time.Second)
 	return err
 }
 

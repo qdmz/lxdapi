@@ -157,6 +157,16 @@ func provisionOrderInternal(order *models.Order) error {
 		NodeID:       order.NodeID, // 节点路由：容器创建在订单归属节点上
 	}
 
+	// 产品级开关（允许嵌套 / 特权 / SWAP）随开通透传到容器
+	if order.ProductID != 0 {
+		var product models.Product
+		if err := db.DB.First(&product, order.ProductID).Error; err == nil {
+			req.AllowNesting = product.AllowNesting
+			req.Privileged = product.Privileged
+			req.MemorySwap = product.MemorySwap
+		}
+	}
+
 	svc := NewContainerService()
 	if err := svc.Create(context.Background(), req); err != nil {
 		return err

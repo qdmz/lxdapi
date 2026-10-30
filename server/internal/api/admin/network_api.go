@@ -2,36 +2,34 @@ package admin
 
 import (
 	"context"
-	"net"
-	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"lxdapi/internal/netnat"
+	"lxdapi/internal/node"
 	"lxdapi/pkg/response"
 )
 
+// 网络 NAT 相关接口按 node_id 路由：本机节点在本机执行（internal/netnat），
+// 远程节点下发到该节点的系统端点执行——此前不分节点永远作用于主控本机，
+// 在页面选了远程节点时看到的、改的都是主控自己的 lxdbr0。
+
 func GetNetworkNATStatus(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	nodeID := parseNodeIDQuery(c)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
 
-	result := gin.H{}
-
-	v4Output, err := exec.CommandContext(ctx, "lxc", "network", "get", "lxdbr0", "ipv4.nat").Output()
-	if err != nil {
-		result["ipv4_nat"] = false
-	} else {
-		result["ipv4_nat"] = strings.TrimSpace(string(v4Output)) == "true"
+	if node.IsRemoteNode(nodeID) {
+		var data map[string]bool
+		if err := node.ClientForNode(nodeID).RemoteDoJSON(ctx, "GET", "/api/system/network/nat", nil, &data); err != nil {
+			response.Error(c, 500, "读取节点NAT状态失败: "+err.Error())
+			return
+		}
+		response.Success(c, data)
+		return
 	}
 
-	v6Output, err := exec.CommandContext(ctx, "lxc", "network", "get", "lxdbr0", "ipv6.nat").Output()
-	if err != nil {
-		result["ipv6_nat"] = false
-	} else {
-		result["ipv6_nat"] = strings.TrimSpace(string(v6Output)) == "true"
-	}
-
-	response.Success(c, result)
+	response.Success(c, netnat.Status(ctx))
 }
 
 func SetNetworkNATStatus(c *gin.Context) {
@@ -45,79 +43,46 @@ func SetNetworkNATStatus(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	nodeID := parseNodeIDQuery(c)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
 
-	if req.IPv4NAT != nil {
-		value := "false"
-		if *req.IPv4NAT {
-			value = "true"
-		}
-		if err := exec.CommandContext(ctx, "lxc", "network", "set", "lxdbr0", "ipv4.nat", value).Run(); err != nil {
-			response.Error(c, 500, "设置IPv4 NAT失败: "+err.Error())
+	if node.IsRemoteNode(nodeID) {
+		if err := node.ClientForNode(nodeID).RemoteDoJSON(ctx, "POST", "/api/system/network/nat", req, nil); err != nil {
+			response.Error(c, 500, "设置节点NAT失败: "+err.Error())
 			return
 		}
+		response.Success(c, "设置成功")
+		return
 	}
 
-	if req.IPv6NAT != nil {
-		value := "false"
-		if *req.IPv6NAT {
-			value = "true"
-		}
-		if err := exec.CommandContext(ctx, "lxc", "network", "set", "lxdbr0", "ipv6.nat", value).Run(); err != nil {
-			response.Error(c, 500, "设置IPv6 NAT失败: "+err.Error())
-			return
-		}
+	if err := netnat.Set(ctx, req.IPv4NAT, req.IPv6NAT); err != nil {
+		response.Error(c, 500, err.Error())
+		return
 	}
-
 	response.Success(c, "设置成功")
 }
 
 // FixEgressNAT 一键修复容器出网：开启转发、放行 LXD 桥、补 MASQUERADE 并持久化
 func FixEgressNAT(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	nodeID := parseNodeIDQuery(c)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 90*time.Second)
 	defer cancel()
 
-	cidr := bridgeCIDR(ctx)
-	if cidr == "" {
-		response.Error(c, 500, "未找到 lxdbr0 的 IPv4 网段")
+	if node.IsRemoteNode(nodeID) {
+		var data map[string]interface{}
+		if err := node.ClientForNode(nodeID).RemoteDoJSON(ctx, "POST", "/api/system/network/fix-egress", nil, &data); err != nil {
+			response.Error(c, 500, "节点出网修复失败: "+err.Error())
+			return
+		}
+		response.Success(c, data)
 		return
 	}
 
-	actions := []string{}
-	run := func(desc, shell string) {
-		if err := exec.CommandContext(ctx, "sh", "-c", shell).Run(); err != nil {
-			actions = append(actions, desc+"：失败("+err.Error()+")")
-			return
-		}
-		actions = append(actions, desc+"：完成")
-	}
-
-	run("开启 ip_forward", "sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1; echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-lxd-forward.conf")
-	run("放行 LXD 桥转发", "if iptables -n -L DOCKER-USER >/dev/null 2>&1; then iptables -C DOCKER-USER -i lxdbr0 -j ACCEPT 2>/dev/null || iptables -I DOCKER-USER 1 -i lxdbr0 -j ACCEPT; else iptables -C FORWARD -i lxdbr0 -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i lxdbr0 -j ACCEPT; fi")
-	run("放行回程连接", "if iptables -n -L DOCKER-USER >/dev/null 2>&1; then iptables -C DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -I DOCKER-USER 2 -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT; fi")
-	run("出站 MASQUERADE "+cidr, "iptables -t nat -C POSTROUTING -s "+cidr+" ! -o lxdbr0 -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "+cidr+" ! -o lxdbr0 -j MASQUERADE")
-
-	persisted := false
-	if err := exec.CommandContext(ctx, "sh", "-c", "command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save >/dev/null 2>&1").Run(); err == nil {
-		persisted = true
-	}
-
-	response.Success(c, gin.H{"cidr": cidr, "actions": actions, "persisted": persisted})
-}
-
-// bridgeCIDR 取 lxdbr0 的 IPv4 网段，如 10.120.105.0/24
-func bridgeCIDR(ctx context.Context) string {
-	out, err := exec.CommandContext(ctx, "ip", "-4", "-o", "addr", "show", "lxdbr0").Output()
+	result, err := netnat.FixEgress(ctx)
 	if err != nil {
-		return ""
+		response.Error(c, 500, err.Error())
+		return
 	}
-	for _, f := range strings.Fields(string(out)) {
-		if strings.Contains(f, "/") {
-			if _, ipnet, err := net.ParseCIDR(f); err == nil {
-				return ipnet.String()
-			}
-		}
-	}
-	return ""
+	response.Success(c, result)
 }

@@ -36,11 +36,25 @@ func (c *Client) GetContainerInfo(ctx context.Context, name string) (*ContainerI
 		if err != nil {
 			return nil, err
 		}
-		return &ContainerInfo{
+		info := &ContainerInfo{
 			Name:   rc.Name,
 			Status: mapRemoteStatus(rc.Status),
 			Config: map[string]interface{}{"image.description": rc.Image},
-		}, nil
+		}
+		// 把节点回传的内网 IP 合成为 eth0 地址，供缓存刷新等按本地结构读取的代码使用
+		if rc.PrivateIP != "" || rc.PrivateIPv6 != "" {
+			addrs := make([]interface{}, 0, 2)
+			if rc.PrivateIP != "" {
+				addrs = append(addrs, map[string]interface{}{"family": "inet", "address": rc.PrivateIP})
+			}
+			if rc.PrivateIPv6 != "" {
+				addrs = append(addrs, map[string]interface{}{"family": "inet6", "address": rc.PrivateIPv6})
+			}
+			info.State = &ContainerState{Network: map[string]interface{}{
+				"eth0": map[string]interface{}{"addresses": addrs},
+			}}
+		}
+		return info, nil
 	}
 	output, err := c.exec(ctx, "query", fmt.Sprintf("/1.0/instances/%s?recursion=2", name))
 	if err != nil {

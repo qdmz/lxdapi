@@ -167,7 +167,7 @@ func AllocatePortMapping(c *gin.Context) {
 		}
 
 		var natConfigs []models.NATConfigV4
-		if err := db.DB.Find(&natConfigs).Error; err != nil {
+		if err := db.DB.Where("node_id = ? OR node_id = 0", effNodeID(container.NodeID)).Find(&natConfigs).Error; err != nil {
 			response.Error(c, 500, "获取NAT配置失败")
 			return
 		}
@@ -235,7 +235,7 @@ func AllocatePortMapping(c *gin.Context) {
 		}
 
 		var natConfigs []models.NATConfigV6
-		if err := db.DB.Find(&natConfigs).Error; err != nil {
+		if err := db.DB.Where("node_id = ? OR node_id = 0", effNodeID(container.NodeID)).Find(&natConfigs).Error; err != nil {
 			response.Error(c, 500, "获取NAT配置失败")
 			return
 		}

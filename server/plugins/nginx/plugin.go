@@ -168,6 +168,15 @@ func (p *NginxPlugin) RegisterRoutes(r *gin.Engine) {
 		userAPI.PUT("/proxies/:id", api.UpdateUserProxy)
 		userAPI.DELETE("/proxies/:id", api.DeleteUserProxy)
 	}
+
+	// 节点系统端点：主控把远程节点的反代规则下发到这里，在本机 upsert 并应用（X-API-Hash 鉴权）
+	sysAPI := r.Group("/api/system/nginx")
+	sysAPI.Use(middleware.SystemAuth())
+	{
+		sysAPI.POST("/proxies", api.SysUpsertProxy)
+		sysAPI.DELETE("/proxies/by-domain", api.SysDeleteProxyByDomain)
+		sysAPI.GET("/status", api.GetStatus)
+	}
 	
 	containerAPI := r.Group("/api/container/nginx")
 	containerAPI.Use(middleware.ContainerAuth())
@@ -230,7 +239,9 @@ func (p *NginxPlugin) generateConfigs() error {
 	}
 	
 	var proxies []models.ReverseProxy
-	if err := db.DB.Where("status = ?", "active").Find(&proxies).Error; err != nil {
+	// 只生成本机节点的规则：远程节点的规则由主控下发到节点、在节点本机生成，
+	// 此前全量生成会把指向远程内网 IP 的配置写进本机 nginx，不可达且互相串扰。
+	if err := db.DB.Where("status = ? AND (node_id = 0 OR node_id = 1)", "active").Find(&proxies).Error; err != nil {
 		return fmt.Errorf("查询反向代理规则失败: %v", err)
 	}
 	

@@ -73,6 +73,7 @@
                         <h1 class="text-sm lg:text-base font-semibold text-gray-800 truncate">{{ .container_name }}</h1>
                         <div class="flex flex-col sm:flex-row sm:gap-3 lg:gap-4 text-xs mt-0.5">
                             <p class="text-gray-500 truncate">镜像: <span id="containerImage" class="font-medium text-gray-800">加载中...</span></p>
+                            <p class="text-gray-500 truncate">节点: <span id="containerNode" class="font-medium text-gray-800">加载中...</span></p>
                             <p class="text-gray-500 truncate">密码: <span id="containerPassword" class="font-mono font-medium text-gray-800">-</span></p>
                         </div>
                     </div>
@@ -1129,6 +1130,7 @@
             
             $('#containerStatus').html(statusBadge);
             $('#containerImage').text(c.image || '未知镜像');
+            $('#containerNode').text(c.node_name || '-');
             $('#containerPassword').text(c.password || '-');
 
 
@@ -2712,19 +2714,27 @@
 
         function loadReinstallTemplateList() {
             $('#reinstallImage').html('<option value="">加载中...</option>');
-            
+            // 按容器所属节点取镜像（node_id=0 的早期本机容器按节点 1 处理）
+            const nid = (containerData && containerData.node_id) ? containerData.node_id : 1;
             $.ajax({
-                url: '/api/admin/templates',
+                url: '/api/admin/templates?node_id=' + nid,
                 type: 'GET',
                 success: function(result) {
+                    if (result.code === 200 && result.data.templates && !result.data.templates.length && !loadReinstallTemplateList._synced) {
+                        // 该节点还没同步过模板：自动同步一次再重新加载
+                        loadReinstallTemplateList._synced = true;
+                        $.ajax({ url: '/api/admin/templates/sync?node_id=' + nid, type: 'POST',
+                            success: function() { loadReinstallTemplateList(); },
+                            error: function() { $('#reinstallImage').html('<option value="">该节点暂无可用镜像</option>'); } });
+                        return;
+                    }
                     if (result.code === 200 && result.data.templates) {
                         const templates = result.data.templates;
                         let options = '<option value="">请选择镜像</option>';
                         
                         templates.forEach(t => {
-                            const label = t.alias || t.fingerprint.substring(0, 12);
-                            const osInfo = t.os && t.release ? ` (${t.os} ${t.release})` : '';
-                            options += `<option value="${t.alias || t.fingerprint}">${label}${osInfo}</option>`;
+                            const label = t.alias || t.description || (t.os && t.release ? `${t.os} ${t.release}` : t.fingerprint.substring(0, 12));
+                            options += `<option value="${t.alias || t.fingerprint}">${label}</option>`;
                         });
                         
                         $('#reinstallImage').html(options);

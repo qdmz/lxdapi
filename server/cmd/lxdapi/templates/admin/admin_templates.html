@@ -39,7 +39,7 @@
                 <p class="text-sm lg:text-base text-gray-600 mt-1">管理LXD容器镜像模板</p>
             </div>
             <div class="flex gap-2 items-center">
-                <select id="nodeSelector" class="select select-bordered select-sm" onchange="loadTemplates()">
+                <select id="nodeSelector" class="select select-bordered select-sm" onchange="loadTemplates(); resetRemotePanel();">
                     <option value="">全部节点</option>
                 </select>
                 <button onclick="syncTemplates()" class="px-3 py-2 text-xs lg:text-sm font-medium text-gray-700 content-box hover:bg-gray-50 border border-gray-200 rounded-lg transition flex items-center justify-center gap-2">
@@ -93,6 +93,31 @@
                 <div class="flex gap-2">
                     <button onclick="batchDelete()" class="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 border border-red-300 rounded transition">批量删除</button>
                 </div>
+            </div>
+        </div>
+
+
+        <div class="content-box rounded-lg border border-gray-200 p-4 mb-4">
+            <div class="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3">
+                <div>
+                    <h2 class="text-base font-semibold text-gray-800 flex items-center gap-2">
+                        <span class="iconify text-green-600" data-icon="mdi:cloud-download" data-width="20"></span>
+                        远程可下载镜像
+                    </h2>
+                    <p class="text-xs text-gray-500 mt-1">官方镜像源（images.linuxcontainers.org）里该节点可下载的系统，点「下载到节点」拉取并登记为模板。请先在上方选择单个节点。</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input id="remoteSearch" type="text" placeholder="搜索系统，如 ubuntu" class="input input-bordered input-sm w-48" oninput="renderRemoteImages()">
+                    <button onclick="loadRemoteImages()" class="px-3 py-2 text-xs lg:text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+                        </svg>
+                        <span>加载远程镜像</span>
+                    </button>
+                </div>
+            </div>
+            <div id="remoteImagesContent" class="mt-3">
+                <p class="text-xs text-gray-400 py-2">尚未加载。选择节点后点击「加载远程镜像」获取可下载系统列表（经节点向镜像源查询，可能需要几十秒）。</p>
             </div>
         </div>
 
@@ -362,6 +387,140 @@
                 selected.push($(this).data('fingerprint'));
             });
             return selected;
+        }
+
+        let remoteImagesData = [];
+
+        function resetRemotePanel() {
+            remoteImagesData = [];
+            $('#remoteSearch').val('');
+            $('#remoteImagesContent').html('<p class="text-xs text-gray-400 py-2">尚未加载。选择节点后点击「加载远程镜像」获取可下载系统列表（经节点向镜像源查询，可能需要几十秒）。</p>');
+        }
+
+        function loadRemoteImages() {
+            const nodeId = document.getElementById('nodeSelector').value;
+            if (!nodeId) {
+                showToast('error', '请先在上方选择一个节点，远程镜像按节点加载');
+                return;
+            }
+            $('#remoteImagesContent').html('<p class="text-center py-6 text-gray-500 text-sm">正在向镜像源获取列表，请稍候...</p>');
+            $.ajax({
+                url: '/api/admin/remote-images?node_id=' + encodeURIComponent(nodeId),
+                type: 'GET',
+                timeout: 320000,
+                success: function(result) {
+                    if (result.code === 200) {
+                        remoteImagesData = (result.data && result.data.images) || [];
+                        renderRemoteImages();
+                    } else {
+                        $('#remoteImagesContent').html('<p class="text-center py-6 text-red-500 text-sm">加载失败</p>');
+                        showToast('error', result.msg || '加载远程镜像失败');
+                    }
+                },
+                error: function(xhr) {
+                    let errorMsg = '加载远程镜像失败';
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        errorMsg = response.msg || errorMsg;
+                    } catch (e) {
+                        errorMsg = xhr.statusText || errorMsg;
+                    }
+                    $('#remoteImagesContent').html('<p class="text-center py-6 text-red-500 text-sm">' + errorMsg + '</p>');
+                    showToast('error', errorMsg);
+                }
+            });
+        }
+
+        function renderRemoteImages() {
+            const kw = ($('#remoteSearch').val() || '').toLowerCase();
+            const list = remoteImagesData.filter(function(img) {
+                if (!kw) return true;
+                return (img.name || '').toLowerCase().includes(kw)
+                    || (img.alias || '').toLowerCase().includes(kw)
+                    || (img.description || '').toLowerCase().includes(kw);
+            });
+            if (!list.length) {
+                $('#remoteImagesContent').html('<p class="text-center py-6 text-gray-500 text-sm">没有匹配的远程镜像</p>');
+                return;
+            }
+            let html = '<div class="overflow-x-auto"><table class="table table-sm w-full"><thead><tr class="bg-gray-50">'
+                + '<th class="text-xs text-gray-600">系统</th>'
+                + '<th class="text-xs text-gray-600">描述</th>'
+                + '<th class="text-xs text-gray-600">架构</th>'
+                + '<th class="text-xs text-gray-600">大小</th>'
+                + '<th class="text-xs text-gray-600">操作</th></tr></thead><tbody>';
+            list.forEach(function(img) {
+                html += '<tr class="hover:bg-gray-50">'
+                    + '<td class="text-sm font-medium text-gray-800">' + escapeHtml(img.name) + '<div class="text-[11px] text-gray-400 font-normal">' + escapeHtml(img.alias) + '</div></td>'
+                    + '<td class="text-xs text-gray-600">' + escapeHtml(img.description || '') + '</td>'
+                    + '<td class="text-xs text-gray-600">' + escapeHtml(img.architecture || '') + '</td>'
+                    + '<td class="text-xs text-gray-600">' + formatRemoteSize(img.size) + '</td>'
+                    + '<td><button class="px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition whitespace-nowrap" onclick="downloadRemoteImage(\'' + encodeURIComponent(img.alias) + '\', \'' + encodeURIComponent(img.remote || '') + '\', this)">下载到节点</button></td>'
+                    + '</tr>';
+            });
+            html += '</tbody></table></div>'
+                + '<p class="text-[11px] text-gray-400 mt-2">共 ' + list.length + ' 个可下载系统。下载耗时取决于镜像大小与节点带宽，期间请勿重复点击。</p>';
+            $('#remoteImagesContent').html(html);
+        }
+
+        function formatRemoteSize(bytes) {
+            if (!bytes) return '-';
+            const units = ['B', 'KB', 'MB', 'GB'];
+            let i = 0;
+            let v = bytes;
+            while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+            return v.toFixed(1) + ' ' + units[i];
+        }
+
+        function escapeHtml(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function(ch) {
+                return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch];
+            });
+        }
+
+        function downloadRemoteImage(encodedAlias, encodedRemote, btn) {
+            const alias = decodeURIComponent(encodedAlias);
+            const remote = decodeURIComponent(encodedRemote || '');
+            const ref = remote ? (remote + ':' + alias) : alias;
+            const nodeId = document.getElementById('nodeSelector').value;
+            if (!nodeId) {
+                showToast('error', '请先在上方选择一个节点');
+                return;
+            }
+            if (!confirm('确认把远程镜像 "' + ref + '" 下载到所选节点并登记为模板吗？\n\n下载可能需要几分钟，取决于镜像大小与节点带宽。')) return;
+            const oldText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '下载中...';
+            showToast('info', '正在下载镜像 ' + ref + '，请稍候...');
+            $.ajax({
+                url: '/api/admin/templates/download',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ node_id: parseInt(nodeId, 10), remote: remote, image: alias }),
+                timeout: 920000,
+                success: function(result) {
+                    if (result.code === 200) {
+                        showToast('success', '镜像下载完成，已登记为模板');
+                        setTimeout(() => loadTemplates(), 1000);
+                    } else {
+                        showToast('error', result.msg || '下载失败');
+                    }
+                },
+                error: function(xhr) {
+                    let errorMsg = '下载失败';
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        errorMsg = response.msg || errorMsg;
+                    } catch (e) {
+                        errorMsg = xhr.statusText || errorMsg;
+                    }
+                    showToast('error', errorMsg);
+                },
+                complete: function() {
+                    btn.disabled = false;
+                    btn.textContent = oldText;
+                }
+            });
         }
 
         function syncTemplates() {

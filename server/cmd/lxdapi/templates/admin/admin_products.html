@@ -214,10 +214,13 @@
                     if (images.length === 0) {
                         sel.innerHTML = '<option value="">该节点暂无镜像</option>';
                     } else {
+                        window._nodeImages = images;
                         sel.innerHTML = '<option value="">请选择镜像</option>' + images.map(img => {
-                            const name = img.alias || img.fingerprint || img.name || '';
-                            const desc = img.description ? ` - ${img.description}` : '';
-                            return `<option value="${name}">${name}${desc}</option>`;
+                            const fp = img.fingerprint || '';
+                            const alias = (img.aliases && img.aliases.length) ? (img.aliases[0].name || '') : '';
+                            const label = img.display_name || alias || fp;
+                            const suffix = (fp && label !== fp) ? `（${fp.substring(0, 12)}…）` : '';
+                            return `<option value="${fp || alias}">${label}${suffix}</option>`;
                         }).join('');
                     }
                 } else {
@@ -303,7 +306,9 @@
                         const curImg = data.data.image || '';
                         if (curImg && !Array.from(imgSel.options).some(o => o.value === curImg)) {
                             const opt = document.createElement('option');
-                            opt.value = curImg; opt.textContent = curImg + ' (当前)';
+                            opt.value = curImg;
+                            const hit = (window._nodeImages || []).find(im => (im.aliases || []).some(a => a.name === curImg));
+                            opt.textContent = (hit && hit.display_name) ? hit.display_name + ' (当前)' : curImg + ' (当前)';
                             imgSel.appendChild(opt);
                         }
                         imgSel.value = curImg;

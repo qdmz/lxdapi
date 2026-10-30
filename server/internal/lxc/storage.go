@@ -24,6 +24,9 @@ type StoragePoolResources struct {
 }
 
 func (c *Client) ListStoragePools(ctx context.Context) ([]StoragePoolInfo, error) {
+	if c.IsRemote() {
+		return c.remoteListStoragePools(ctx)
+	}
 	logger.Info("获取LXD存储池列表")
 
 	output, err := c.exec(ctx, "storage", "list", "--format", "json")
@@ -41,6 +44,9 @@ func (c *Client) ListStoragePools(ctx context.Context) ([]StoragePoolInfo, error
 }
 
 func (c *Client) GetStoragePoolResources(ctx context.Context, name string) (*StoragePoolResources, error) {
+	if c.IsRemote() {
+		return c.remoteGetStoragePoolResources(ctx, name)
+	}
 	output, err := c.exec(ctx, "query", "/1.0/storage-pools/"+name+"/resources")
 	if err != nil {
 		return nil, fmt.Errorf("获取存储池资源失败: %v", err)

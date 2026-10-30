@@ -2,9 +2,12 @@ package container
 
 import (
 	"context"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"lxdapi/internal/db"
 	"lxdapi/internal/executor"
+	noderesolver "lxdapi/internal/node"
 	"lxdapi/internal/service"
 	"lxdapi/models"
 	"lxdapi/pkg/logger"
@@ -53,7 +56,31 @@ func GetInfo(c *gin.Context) {
 		info["traffic"] = traffic
 	}
 
+	// 到期时间：按容器名查本实例最近一笔 active 订单的 expire_at。
+	// 面板侧只有容器名、没有用户数字 ID，故不按 user_id 过滤；
+	// 同名容器在同一实例内唯一，这样查是安全的。查不到则两键为 null，前端不展示。
+	info["expire_at"] = nil
+	info["days_left"] = nil
+	var order models.Order
+	if err := db.DB.Select("expire_at").
+		Where("container_name = ? AND status = ?", name, "active").
+		Order("created_at DESC").First(&order).Error; err == nil && order.ExpireAt != nil {
+		exp := *order.ExpireAt
+		d := daysLeftUntil(exp)
+		info["expire_at"] = exp
+		info["days_left"] = d
+	}
+
 	response.Success(c, info)
+}
+
+// daysLeftUntil 计算距到期剩余天数（按自然日计，今天到期为 0，已过期为负）。
+// 口径与 internal/api/user 的 daysLeftUntil 一致；因分属不同包无法直接复用，故在此同口径实现一份。
+func daysLeftUntil(expire time.Time) int {
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	expDay := time.Date(expire.Year(), expire.Month(), expire.Day(), 0, 0, 0, 0, expire.Location())
+	return int(expDay.Sub(today).Hours() / 24)
 }
 
 // GetTemplateList 获取模板列表
@@ -67,13 +94,70 @@ func GetInfo(c *gin.Context) {
 // @Security ContainerAuth
 // @Router /api/container/templates [get]
 func GetTemplateList(c *gin.Context) {
-	svc := service.NewTemplateService()
+	// 必须按本容器所属节点取镜像：重装只能用该节点上真实存在的镜像，
+	// 混入其它节点模板必然重装失败（此前 List(0) 返回全部节点的模板）。
+	containerName, _ := c.Get("container_name")
+	name, _ := containerName.(string)
 
-	templates, err := svc.List(0)
+	nodeID := uint(0)
+	var dbContainer models.Container
+	if err := db.DB.Where("name = ?", name).First(&dbContainer).Error; err == nil {
+		nodeID = dbContainer.NodeID
+	}
+	effNodeID := nodeID
+	if effNodeID == 0 {
+		effNodeID = 1
+	}
+
+	svc := service.NewTemplateService()
+	templates, err := svc.List(effNodeID)
 	if err != nil {
 		logger.Error("获取模板列表失败: %v", err)
 		response.Error(c, 500, "获取模板列表失败: "+err.Error())
 		return
+	}
+
+	// 该节点还没同步过模板：自动同步一次再查
+	if len(templates) == 0 {
+		if _, _, _, serr := svc.SyncFromLXD(c.Request.Context(), nodeID); serr == nil {
+			if t2, err2 := svc.List(effNodeID); err2 == nil {
+				templates = t2
+			}
+		}
+	}
+
+	// 同步后仍为空：直接读该节点实时镜像兜底
+	if len(templates) == 0 {
+		client := noderesolver.ClientForNode(nodeID)
+		ctx, cancel := context.WithTimeout(c.Request.Context(), time.Minute)
+		defer cancel()
+		if images, ierr := client.ListImages(ctx); ierr == nil {
+			for _, img := range images {
+				alias := ""
+				if len(img.Aliases) > 0 {
+					alias = img.Aliases[0].Name
+				}
+				prop := func(k string) string {
+					if v, ok := img.Properties[k].(string); ok {
+						return v
+					}
+					return ""
+				}
+				templates = append(templates, models.TemplateListResponse{
+					NodeID:       nodeID,
+					Fingerprint:  img.Fingerprint,
+					Alias:        alias,
+					Architecture: img.Architecture,
+					Description:  prop("description"),
+					OS:           prop("os"),
+					Release:      prop("release"),
+					Size:         img.Size,
+					Public:       img.Public,
+					AutoUpdate:   img.AutoUpdate,
+					UploadedAt:   img.UploadedAt,
+				})
+			}
+		}
 	}
 
 	response.Success(c, gin.H{
@@ -347,7 +431,7 @@ func ReleaseIP(c *gin.Context) {
 
 	var settings models.IPPoolSettings
 	db.DB.First(&settings)
-	
+
 	if version == "v4" && !settings.AllowContainerReleaseIPv4 {
 		response.Error(c, 403, "管理员未开放容器释放IPv4权限")
 		return
@@ -397,15 +481,15 @@ func ReleaseIP(c *gin.Context) {
 func GetDNS(c *gin.Context) {
 	name, _ := c.Get("container_name")
 	containerName := name.(string)
-	
+
 	ctx := context.Background()
-	lxcClient := service.NewContainerService().GetLXCClient()
+	lxcClient := noderesolver.ClientForContainer(containerName)
 	dnsServers, err := lxcClient.GetContainerDNS(ctx, containerName)
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return
 	}
-	
+
 	response.Success(c, gin.H{
 		"container": containerName,
 		"dns":       dnsServers,
@@ -415,7 +499,7 @@ func GetDNS(c *gin.Context) {
 func SetDNS(c *gin.Context) {
 	name, _ := c.Get("container_name")
 	containerName := name.(string)
-	
+
 	var req struct {
 		DNS []string `json:"dns" binding:"required"`
 	}
@@ -423,20 +507,20 @@ func SetDNS(c *gin.Context) {
 		response.Error(c, 400, "参数错误")
 		return
 	}
-	
+
 	if len(req.DNS) == 0 {
 		response.Error(c, 400, "DNS服务器列表不能为空")
 		return
 	}
-	
+
 	ctx := context.Background()
-	lxcClient := service.NewContainerService().GetLXCClient()
-	
+	lxcClient := noderesolver.ClientForContainer(containerName)
+
 	if err := lxcClient.SetContainerDNS(ctx, containerName, req.DNS); err != nil {
 		response.Error(c, 500, err.Error())
 		return
 	}
-	
+
 	logger.OK("容器 %s DNS设置成功: %v", containerName, req.DNS)
 	response.Success(c, gin.H{
 		"container": containerName,

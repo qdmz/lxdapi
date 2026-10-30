@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"lxdapi/internal/db"
 	"lxdapi/internal/executor"
+	noderesolver "lxdapi/internal/node"
 	"lxdapi/internal/service"
 	"lxdapi/internal/traffic"
 	"lxdapi/models"
@@ -553,7 +554,7 @@ func GetContainerDNS(c *gin.Context) {
 	name := c.Param("name")
 	ctx := context.Background()
 	
-	lxcClient := service.NewContainerService().GetLXCClient()
+	lxcClient := noderesolver.ClientForContainer(name)
 	dnsServers, err := lxcClient.GetContainerDNS(ctx, name)
 	if err != nil {
 		response.Error(c, 500, err.Error())
@@ -583,7 +584,7 @@ func SetContainerDNS(c *gin.Context) {
 	}
 	
 	ctx := context.Background()
-	lxcClient := service.NewContainerService().GetLXCClient()
+	lxcClient := noderesolver.ClientForContainer(name)
 	
 	if err := lxcClient.SetContainerDNS(ctx, name, req.DNS); err != nil {
 		response.Error(c, 500, err.Error())

@@ -23,17 +23,17 @@ func GetStoragePools(c *gin.Context) {
 	}
 
 	type poolResponse struct {
-		ID          uint   `json:"id"`
-		NodeID      uint   `json:"node_id"`
-		Name        string `json:"name"`
-		Driver      string `json:"driver"`
-		Description string `json:"description"`
-		Status      string `json:"status"`
-		UsedBy      int    `json:"used_by"`
-		TotalSpace  string `json:"total_space"`
-		UsedSpace   string `json:"used_space"`
+		ID           uint    `json:"id"`
+		NodeID       uint    `json:"node_id"`
+		Name         string  `json:"name"`
+		Driver       string  `json:"driver"`
+		Description  string  `json:"description"`
+		Status       string  `json:"status"`
+		UsedBy       int     `json:"used_by"`
+		TotalSpace   string  `json:"total_space"`
+		UsedSpace    string  `json:"used_space"`
 		UsagePercent float64 `json:"usage_percent"`
-		Priority    int    `json:"priority"`
+		Priority     int     `json:"priority"`
 	}
 
 	result := make([]poolResponse, len(pools))
@@ -43,17 +43,17 @@ func GetStoragePools(c *gin.Context) {
 			usagePercent = float64(p.UsedSpace) / float64(p.TotalSpace) * 100
 		}
 		result[i] = poolResponse{
-			ID:          p.ID,
-			NodeID:      p.NodeID,
-			Name:        p.Name,
-			Driver:      p.Driver,
-			Description: p.Description,
-			Status:      p.Status,
-			UsedBy:      p.UsedBy,
-			TotalSpace:  formatBytes(p.TotalSpace),
-			UsedSpace:   formatBytes(p.UsedSpace),
+			ID:           p.ID,
+			NodeID:       p.NodeID,
+			Name:         p.Name,
+			Driver:       p.Driver,
+			Description:  p.Description,
+			Status:       p.Status,
+			UsedBy:       p.UsedBy,
+			TotalSpace:   formatBytes(p.TotalSpace),
+			UsedSpace:    formatBytes(p.UsedSpace),
 			UsagePercent: usagePercent,
-			Priority:    p.Priority,
+			Priority:     p.Priority,
 		}
 	}
 
@@ -102,7 +102,7 @@ func SetStoragePoolPriority(c *gin.Context) {
 	}
 
 	svc := service.NewStorageService()
-	if err := svc.SetPriority(name, req.Priority); err != nil {
+	if err := svc.SetPriority(name, req.Priority, parseNodeIDQuery(c)); err != nil {
 		response.Error(c, 500, "设置失败")
 		return
 	}
@@ -128,6 +128,14 @@ func formatBytes(bytes int64) string {
 }
 
 // parseNodeIDQuery 解析 ?node_id= 查询参数，0 表示不过滤（全局/未分配）
+// effNodeID 把容器/记录里的 node_id 归一化：0 视为本机节点 1。
+func effNodeID(nodeID uint) uint {
+	if nodeID == 0 {
+		return 1
+	}
+	return nodeID
+}
+
 func parseNodeIDQuery(c *gin.Context) uint {
 	var nodeID uint
 	if v := c.Query("node_id"); v != "" {

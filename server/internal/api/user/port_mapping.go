@@ -11,6 +11,14 @@ import (
 	"lxdapi/pkg/response"
 )
 
+// effNodeID 把容器记录里的 node_id 归一化：0 视为本机节点 1。
+func effNodeID(nodeID uint) uint {
+	if nodeID == 0 {
+		return 1
+	}
+	return nodeID
+}
+
 // AllocatePortMapping 分配端口映射（统一接口）
 // @Summary 分配端口映射
 // @Description 为容器分配端口映射，通过version参数区分IPv4/IPv6
@@ -133,7 +141,7 @@ func AllocatePortMapping(c *gin.Context) {
 		}
 
 		var natConfigs []models.NATConfigV4
-		if err := db.DB.Find(&natConfigs).Error; err != nil {
+		if err := db.DB.Where("node_id = ? OR node_id = 0", effNodeID(container.NodeID)).Find(&natConfigs).Error; err != nil {
 			logger.Error("获取NAT配置失败: %v", err)
 			response.Error(c, 500, "获取NAT配置失败")
 			return
@@ -218,7 +226,7 @@ func AllocatePortMapping(c *gin.Context) {
 		}
 
 		var natConfigs []models.NATConfigV6
-		if err := db.DB.Find(&natConfigs).Error; err != nil {
+		if err := db.DB.Where("node_id = ? OR node_id = 0", effNodeID(container.NodeID)).Find(&natConfigs).Error; err != nil {
 			logger.Error("获取NAT配置失败: %v", err)
 			response.Error(c, 500, "获取NAT配置失败")
 			return

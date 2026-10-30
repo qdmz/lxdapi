@@ -1,10 +1,12 @@
 package nginx
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"lxdapi/internal/db"
+	"lxdapi/internal/node"
 	"lxdapi/models"
 	"lxdapi/pkg/logger"
 	"lxdapi/pkg/response"
@@ -15,6 +17,49 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// applyProxyRule 在正确的机器上应用一条反代规则：
+// 本机节点的容器用本机 nginx；远程节点的容器把规则下发到节点（节点按域名 upsert 并应用）。
+// 返回 false 表示已向客户端写了错误响应，调用方应直接返回。
+func (h *APIHandler) applyProxyRule(c *gin.Context, proxy models.ReverseProxy, container models.Container) bool {
+	if node.IsRemoteNode(container.NodeID) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+		defer cancel()
+		payload := proxy
+		payload.ID = 0
+		payload.NodeID = 0
+		if err := node.ClientForNode(container.NodeID).RemoteDoJSON(ctx, "POST", "/api/system/nginx/proxies", payload, nil); err != nil {
+			response.Error(c, 500, fmt.Sprintf("规则已创建但节点应用失败: %v", err))
+			return false
+		}
+		return true
+	}
+	if h.plugin.config.Enabled {
+		if err := h.plugin.ApplyConfig(); err != nil {
+			logger.Error("应用Nginx配置失败: %v", err)
+			response.Error(c, 500, fmt.Sprintf("规则已创建但应用配置失败: %v", err))
+			return false
+		}
+	}
+	return true
+}
+
+// unapplyProxyRule 删除规则后在正确的机器上刷新：远程节点按域名删除并重应用。
+func (h *APIHandler) unapplyProxyRule(c *gin.Context, proxy models.ReverseProxy) {
+	nodeID := node.ResolveNodeIDForContainer(proxy.ContainerName)
+	if node.IsRemoteNode(nodeID) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+		defer cancel()
+		path := "/api/system/nginx/proxies/by-domain?domain=" + proxy.Domain
+		if err := node.ClientForNode(nodeID).RemoteDoJSON(ctx, "DELETE", path, nil, nil); err != nil {
+			logger.Error("节点删除反代规则失败: %v", err)
+		}
+		return
+	}
+	if h.plugin.config.Enabled {
+		h.plugin.ApplyConfig()
+	}
+}
 
 type APIHandler struct {
 	plugin *NginxPlugin
@@ -191,6 +236,21 @@ func (h *APIHandler) checkRestrictions(domain, targetIP string) error {
 }
 
 func (h *APIHandler) GetStatus(c *gin.Context) {
+	if v := c.Query("node_id"); v != "" {
+		var nid uint
+		fmt.Sscanf(v, "%d", &nid)
+		if node.IsRemoteNode(nid) {
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+			defer cancel()
+			var data interface{}
+			if err := node.ClientForNode(nid).RemoteDoJSON(ctx, "GET", "/api/system/nginx/status", nil, &data); err != nil {
+				response.Error(c, 500, "获取节点Nginx状态失败: "+err.Error())
+				return
+			}
+			response.Success(c, data)
+			return
+		}
+	}
 	status, err := h.plugin.manager.GetStatus()
 	if err != nil {
 		response.Error(c, 500, "获取状态失败")
@@ -344,20 +404,17 @@ func (h *APIHandler) CreateProxy(c *gin.Context) {
 	if req.Protocol == "https" {
 		req.EnableSSL = true
 	}
-	
+	req.NodeID = container.NodeID
+
 	if err := db.DB.Create(&req).Error; err != nil {
 		response.Error(c, 500, "创建失败")
 		return
 	}
-	
-	if h.plugin.config.Enabled {
-		if err := h.plugin.ApplyConfig(); err != nil {
-			logger.Error("应用Nginx配置失败: %v", err)
-			response.Error(c, 500, fmt.Sprintf("规则已创建但应用配置失败: %v", err))
-			return
-		}
+
+	if !h.applyProxyRule(c, req, container) {
+		return
 	}
-	
+
 	response.Success(c, req)
 }
 
@@ -408,26 +465,31 @@ func (h *APIHandler) UpdateProxy(c *gin.Context) {
 		response.Error(c, 500, "更新失败")
 		return
 	}
-	
-	if h.plugin.config.Enabled {
-		h.plugin.ApplyConfig()
+
+	var container models.Container
+	db.DB.Where("name = ?", proxy.ContainerName).First(&container)
+	proxy.NodeID = container.NodeID
+	db.DB.Model(&proxy).Update("node_id", proxy.NodeID)
+	if !h.applyProxyRule(c, proxy, container) {
+		return
 	}
-	
+
 	response.Success(c, proxy)
 }
 
 func (h *APIHandler) DeleteProxy(c *gin.Context) {
 	id := c.Param("id")
-	
+
+	var proxy models.ReverseProxy
+	db.DB.First(&proxy, id)
+
 	if err := db.DB.Unscoped().Delete(&models.ReverseProxy{}, id).Error; err != nil {
 		response.Error(c, 500, "删除失败")
 		return
 	}
-	
-	if h.plugin.config.Enabled {
-		h.plugin.ApplyConfig()
-	}
-	
+
+	h.unapplyProxyRule(c, proxy)
+
 	response.Success(c, "删除成功")
 }
 
@@ -688,20 +750,17 @@ func (h *APIHandler) createProxyInternal(c *gin.Context, req models.ReverseProxy
 	if req.Status == "" {
 		req.Status = "active"
 	}
-	
+	req.NodeID = container.NodeID
+
 	if err := db.DB.Create(&req).Error; err != nil {
 		response.Error(c, 500, "创建失败")
 		return
 	}
-	
-	if h.plugin.config.Enabled {
-		if err := h.plugin.ApplyConfig(); err != nil {
-			logger.Error("应用Nginx配置失败: %v", err)
-			response.Error(c, 500, fmt.Sprintf("规则已创建但应用配置失败: %v", err))
-			return
-		}
+
+	if !h.applyProxyRule(c, req, container) {
+		return
 	}
-	
+
 	response.Success(c, req)
 }
 
@@ -721,4 +780,71 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dm%ds", minutes, seconds)
 	}
 	return fmt.Sprintf("%ds", seconds)
+}
+
+// ---- 节点系统端点（主控下发，X-API-Hash 鉴权，本机执行） ----
+
+// SysUpsertProxy 按域名 upsert 一条反代规则并应用本机 nginx。
+func (h *APIHandler) SysUpsertProxy(c *gin.Context) {
+	var req models.ReverseProxy
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "参数错误")
+		return
+	}
+	if req.Domain == "" || req.ContainerName == "" {
+		response.Error(c, 400, "域名与容器名不能为空")
+		return
+	}
+	req.ID = 0
+	req.NodeID = 0
+	if req.Status == "" {
+		req.Status = "active"
+	}
+	var existing models.ReverseProxy
+	if err := db.DB.Where("domain = ?", req.Domain).First(&existing).Error; err == nil {
+		existing.Protocol = req.Protocol
+		existing.PublicPort = req.PublicPort
+		existing.TargetIP = req.TargetIP
+		existing.TargetPort = req.TargetPort
+		existing.ContainerName = req.ContainerName
+		existing.EnableSSL = req.EnableSSL
+		existing.SSLCert = req.SSLCert
+		existing.SSLKey = req.SSLKey
+		existing.CustomConfig = req.CustomConfig
+		existing.Description = req.Description
+		existing.Status = req.Status
+		if err := db.DB.Save(&existing).Error; err != nil {
+			response.Error(c, 500, "更新失败")
+			return
+		}
+	} else {
+		if err := db.DB.Create(&req).Error; err != nil {
+			response.Error(c, 500, "创建失败")
+			return
+		}
+	}
+	if h.plugin.config.Enabled {
+		if err := h.plugin.ApplyConfig(); err != nil {
+			response.Error(c, 500, "应用配置失败: "+err.Error())
+			return
+		}
+	}
+	response.Success(c, gin.H{"domain": req.Domain, "applied": true})
+}
+
+// SysDeleteProxyByDomain 按域名删除反代规则并重应用本机 nginx（不存在也视为成功，幂等）。
+func (h *APIHandler) SysDeleteProxyByDomain(c *gin.Context) {
+	domain := c.Query("domain")
+	if domain == "" {
+		response.Error(c, 400, "缺少 domain 参数")
+		return
+	}
+	db.DB.Unscoped().Where("domain = ?", domain).Delete(&models.ReverseProxy{})
+	if h.plugin.config.Enabled {
+		if err := h.plugin.ApplyConfig(); err != nil {
+			response.Error(c, 500, "应用配置失败: "+err.Error())
+			return
+		}
+	}
+	response.Success(c, gin.H{"domain": domain, "deleted": true})
 }

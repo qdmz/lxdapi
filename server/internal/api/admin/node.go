@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"encoding/hex"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -11,6 +12,32 @@ import (
 	"lxdapi/pkg/response"
 )
 
+// resolveImageAlias 把 64 位指纹形式的默认镜像解析成该节点模板的别名（可读名）；
+// 解析不到（节点离线/模板未同步）则原样返回。节点列表展示与保存归一都走这里，
+// 避免再出现默认镜像显示成一串指纹字母。
+func resolveImageAlias(nodeID uint, image string) string {
+	if len(image) != 64 {
+		return image
+	}
+	if _, err := hex.DecodeString(image); err != nil {
+		return image
+	}
+	var tpl models.Template
+	if err := db.DB.Where("node_id = ? AND fingerprint = ?", nodeID, image).First(&tpl).Error; err == nil && tpl.Alias != "" {
+		return tpl.Alias
+	}
+	return image
+}
+
+type nodeView struct {
+	models.Node
+	ImageDisplayName string `json:"image_display_name"`
+}
+
+func toNodeView(n models.Node) nodeView {
+	return nodeView{Node: n, ImageDisplayName: resolveImageAlias(n.ID, n.Image)}
+}
+
 // GetNodes 节点列表
 func GetNodes(c *gin.Context) {
 	var nodes []models.Node
@@ -18,7 +45,11 @@ func GetNodes(c *gin.Context) {
 		response.Error(c, 500, "获取节点列表失败")
 		return
 	}
-	response.Success(c, nodes)
+	views := make([]nodeView, 0, len(nodes))
+	for _, n := range nodes {
+		views = append(views, toNodeView(n))
+	}
+	response.Success(c, views)
 }
 
 // GetNode 单个节点
@@ -28,7 +59,7 @@ func GetNode(c *gin.Context) {
 		response.Error(c, 404, "节点不存在")
 		return
 	}
-	response.Success(c, node)
+	response.Success(c, toNodeView(node))
 }
 
 // CreateNode 创建节点
@@ -57,7 +88,12 @@ func CreateNode(c *gin.Context) {
 		response.Error(c, 500, "创建节点失败")
 		return
 	}
-	response.Success(c, node)
+	// 默认镜像若填的是指纹，归一成别名存（展示与开通都更可读）
+	if alias := resolveImageAlias(node.ID, node.Image); alias != node.Image {
+		node.Image = alias
+		db.DB.Model(&node).Update("image", alias)
+	}
+	response.Success(c, toNodeView(node))
 }
 
 // UpdateNode 更新节点
@@ -84,7 +120,7 @@ func UpdateNode(c *gin.Context) {
 	node.Host = input.Host
 	node.APIPort = input.APIPort
 	node.APIHash = input.APIHash
-	node.Image = input.Image
+	node.Image = resolveImageAlias(node.ID, input.Image)
 	node.StoragePool = input.StoragePool
 	node.Network = input.Network
 	node.Status = input.Status
@@ -99,7 +135,7 @@ func UpdateNode(c *gin.Context) {
 		response.Error(c, 500, "节点已更新，但商品机房同步失败")
 		return
 	}
-	response.Success(c, node)
+	response.Success(c, toNodeView(node))
 }
 
 // DeleteNode 删除节点
@@ -142,18 +178,11 @@ func TestNode(c *gin.Context) {
 
 // GetNodeImages 获取指定节点的镜像列表
 func GetNodeImages(c *gin.Context) {
-	var node models.Node
-	if err := db.DB.First(&node, c.Param("id")).Error; err != nil {
-		response.Error(c, 404, "节点不存在")
+	client, _, ok := nodeClientByID(c)
+	if !ok {
 		return
 	}
-	var client *lxc.Client
-	if node.Host == "" {
-		client = lxc.NewClient()
-	} else {
-		client = lxc.NewRemoteClient(node.Host, node.APIPort, node.APIHash)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	images, err := client.ListImages(ctx)
 	if err != nil {

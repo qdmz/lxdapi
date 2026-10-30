@@ -350,6 +350,16 @@
             }
         }
 
+        // 到期时间展示：YYYY-MM-DD（剩 X 天）；已过期红字、无订单数据返回空串
+        function expireCellHTML(c) {
+            if (!c.expire_at) return '';
+            const d = String(c.expire_at).slice(0, 10);
+            if (c.days_left === null || c.days_left === undefined) return d;
+            if (c.days_left < 0) return d + ' <span class="text-red-600 font-semibold">已过期</span>';
+            if (c.days_left === 0) return d + ' <span class="text-amber-600 font-semibold">今天到期</span>';
+            return d + '（剩 ' + c.days_left + ' 天）';
+        }
+
         function renderCardView() {
             let dataToRender = getPageData();
             
@@ -412,6 +422,15 @@
                                     <span class="text-gray-600">流量</span>
                                     <span class="font-medium text-gray-800">${trafficDisplay}</span>
                                 </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-gray-600">节点</span>
+                                    <span class="font-medium text-gray-800">${c.node_name || '-'}</span>
+                                </div>
+                                ${c.expire_at ? `
+                                <div class="flex items-center justify-between">
+                                    <span class="text-gray-600">到期时间</span>
+                                    <span class="font-medium text-gray-800">${expireCellHTML(c)}</span>
+                                </div>` : ''}
                             </div>
                             <div class="flex gap-2">
                                 <a href="/user/container?name=${c.name}" class="flex-1 px-2 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded transition text-center block">详情</a>
@@ -440,11 +459,13 @@
                                     </th>
                                     <th class="text-xs text-gray-600">主机名</th>
                                     <th class="text-xs text-gray-600">备注</th>
+                                    <th class="text-xs text-gray-600">节点</th>
                                     <th class="text-xs text-gray-600">状态</th>
                                     <th class="text-xs text-gray-600">CPU</th>
                                     <th class="text-xs text-gray-600">内存</th>
                                     <th class="text-xs text-gray-600">磁盘</th>
                                     <th class="text-xs text-gray-600">流量</th>
+                                    <th class="text-xs text-gray-600">到期时间</th>
                                     <th class="text-xs text-gray-600">操作</th>
                                 </tr>
                             </thead>
@@ -493,11 +514,13 @@
                         </td>
                         <td><span class="font-semibold text-gray-800 text-xs">${c.name}</span></td>
                         <td>${remarkBadge}</td>
+                        <td class="text-xs text-gray-700">${c.node_name || '-'}</td>
                         <td>${statusBadge}</td>
                         <td class="text-xs text-gray-700">${(c.cpu_usage || 0).toFixed(1)}% / ${c.cpu || 1}核</td>
                         <td class="text-xs text-gray-700">${memoryDisplay}</td>
                         <td class="text-xs text-gray-700">${diskDisplay}</td>
                         <td class="text-xs text-gray-700">${trafficDisplay}</td>
+                        <td class="text-xs text-gray-700">${c.expire_at ? expireCellHTML(c) : '<span class="text-gray-400">-</span>'}</td>
                         <td>
                             <div class="flex gap-1">
                                 <a href="/user/container?name=${c.name}" class="px-2 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition">详情</a>

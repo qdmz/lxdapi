@@ -144,6 +144,7 @@
                         <h1 id="containerName" class="text-base sm:text-lg font-semibold text-gray-900 truncate">加载中...</h1>
                         <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs sm:text-sm mt-1">
                             <p class="text-gray-600">镜像: <span id="containerImage" class="font-medium text-gray-800">-</span></p>
+                            <p class="text-gray-600">节点: <span id="containerNode" class="font-medium text-gray-800">-</span></p>
                             <p class="text-gray-600">密码: <span id="containerPassword" class="font-mono font-medium text-gray-800">-</span></p>
                         </div>
                     </div>
@@ -210,7 +211,7 @@
             <!-- Dashboard / Info Tab -->
             <div id="infoTab" class="space-y-4 sm:space-y-6">
                 <!-- Network Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
                     <!-- IPv4 -->
                     <div class="content-box rounded-lg p-4 sm:p-5 border border-gray-200 relative overflow-hidden group flex flex-col justify-between">
                         <div class="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition">
@@ -239,6 +240,14 @@
                                 <span class="iconify w-4 h-4" data-icon="heroicons:document-duplicate"></span>
                              </button>
                         </div>
+                    </div>
+                    <!-- Expiry -->
+                    <div id="containerExpireCard" class="content-box rounded-lg p-4 sm:p-5 border border-gray-200 relative overflow-hidden group flex flex-col justify-between" style="display:none;">
+                        <div class="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition">
+                            <span class="iconify w-16 h-16 text-blue-500" data-icon="heroicons:calendar"></span>
+                        </div>
+                        <p class="text-xs font-medium text-gray-500 mb-2">到期时间</p>
+                        <p id="containerExpire" class="text-sm font-mono font-medium text-gray-800 break-all">-</p>
                     </div>
                 </div>
 
@@ -901,7 +910,22 @@
             $('#containerIconBg').removeClass('from-blue-500 to-blue-600 from-green-500 to-green-600 from-gray-500 to-gray-600 from-yellow-500 to-yellow-600').addClass('bg-gradient-to-br ' + iconClass);
             
             $('#containerImage').text(c.image || '未知镜像');
+            $('#containerNode').text(c.node_name || '-');
             $('#containerPassword').text(c.password || '-');
+            // 到期时间（最近一笔 active 订单，无订单数据时整卡隐藏）
+            if (c.expire_at) {
+                const expDate = String(c.expire_at).slice(0, 10);
+                let expHtml = expDate;
+                if (c.days_left !== null && c.days_left !== undefined) {
+                    if (c.days_left < 0) expHtml = expDate + ' <span class="text-red-600 font-semibold">已过期</span>';
+                    else if (c.days_left === 0) expHtml = expDate + ' <span class="text-amber-600 font-semibold">今天到期</span>';
+                    else expHtml = expDate + '（剩 ' + c.days_left + ' 天）';
+                }
+                $('#containerExpire').html(expHtml);
+                $('#containerExpireCard').show();
+            } else {
+                $('#containerExpireCard').hide();
+            }
 
             // IPs
             $('#containerIPv4').text(c.ipv4 && c.ipv4.length > 0 ? c.ipv4.join('\n') : '无');
@@ -1089,7 +1113,7 @@
                         const templates = result.data.templates;
                         let options = '<option value="">请选择镜像</option>';
                         templates.forEach(t => {
-                            const label = t.alias || t.fingerprint.substring(0, 12);
+                            const label = t.display_name || t.alias || ((t.os && t.release) ? (t.os + ' ' + t.release) : t.fingerprint.substring(0, 12));
                             const osInfo = t.os && t.release ? ` (${t.os} ${t.release})` : '';
                             options += `<option value="${t.alias || t.fingerprint}">${label}${osInfo}</option>`;
                         });

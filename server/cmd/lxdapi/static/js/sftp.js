@@ -351,6 +351,13 @@ class SFTPUI {
 
     this._initModals();
     this._renderBreadcrumb();
+
+    // 与 SSH 控制台页一致：打开页面自动连接，关闭窗口/离开页面自动断开，
+    // 不再需要手动点“连接”。pagehide 与 beforeunload 都注册，
+    // disconnect() 对未连接状态是安全的，两个事件先后触发也不会重复出错。
+    window.addEventListener('pagehide', () => this.disconnect());
+    window.addEventListener('beforeunload', () => this.disconnect());
+    this.connect();
   }
 
   _setStatus(state, text) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"lxdapi/internal/db"
 	"lxdapi/internal/lxc"
+	"lxdapi/internal/node"
 	"lxdapi/models"
 	"lxdapi/pkg/logger"
 )
@@ -49,8 +50,8 @@ func (s *StorageService) SyncFromLXD(ctx context.Context, nodeID uint) (int, int
 		}
 
 		var existing models.StoragePool
-		// Name 是全局 uniqueIndex：按名全局查，命中旧行就更新并认领到当前同步节点
-		err := db.DB.Where("name = ?", p.Name).First(&existing).Error
+		// (node_id, name) 复合唯一：按节点+名查，不同节点的同名池互不干扰
+		err := db.DB.Where("node_id = ? AND name = ?", nodeID, p.Name).First(&existing).Error
 
 		pool := models.StoragePool{
 			NodeID:      nodeID,
@@ -96,23 +97,43 @@ func (s *StorageService) SyncFromLXD(ctx context.Context, nodeID uint) (int, int
 	return added, updated, deleted, nil
 }
 
-func (s *StorageService) SetPriority(name string, priority int) error {
-	return db.DB.Model(&models.StoragePool{}).Where("name = ?", name).Update("priority", priority).Error
+func (s *StorageService) SetPriority(name string, priority int, nodeID uint) error {
+	q := db.DB.Model(&models.StoragePool{}).Where("name = ?", name)
+	if nodeID > 0 {
+		q = q.Where("node_id = ?", nodeID)
+	}
+	return q.Update("priority", priority).Error
 }
 
 func (s *StorageService) GetDefault() string {
+	return s.GetDefaultForNode(0)
+}
+
+// GetDefaultForNode 按节点选默认存储池：只看该节点的池，并用该节点的客户端探活。
+// 此前不分节点混选，远程节点没有同名池时建容器/重装会失败。
+func (s *StorageService) GetDefaultForNode(nodeID uint) string {
 	ctx := context.Background()
+	eff := nodeID
+	if eff == 0 {
+		eff = 1
+	}
+	client := node.ClientForNode(nodeID)
 	var pools []models.StoragePool
-	db.DB.Where("priority > 0").Order("priority ASC").Find(&pools)
+	db.DB.Where("node_id = ? AND priority > 0", eff).Order("priority ASC").Find(&pools)
 
 	for _, pool := range pools {
-		res, err := s.lxcClient.GetStoragePoolResources(ctx, pool.Name)
+		res, err := client.GetStoragePoolResources(ctx, pool.Name)
 		if err != nil {
 			continue
 		}
 		if res.Space.Total > 0 && float64(res.Space.Used)/float64(res.Space.Total) < 0.95 {
 			return pool.Name
 		}
+	}
+	// 兜底：节点登记时填的存储池
+	var n models.Node
+	if err := db.DB.First(&n, eff).Error; err == nil && n.StoragePool != "" {
+		return n.StoragePool
 	}
 	return "default"
 }

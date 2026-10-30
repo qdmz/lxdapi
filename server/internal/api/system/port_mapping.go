@@ -32,13 +32,15 @@ func AllocatePortMapping(c *gin.Context) {
 	}
 
 	var req struct {
-		ContainerName string `json:"container_name" binding:"required"`
-		Interface     string `json:"interface" binding:"required"`
-		PublicIP      string `json:"public_ip" binding:"required"`
-		PublicPort    int    `json:"public_port" binding:"required"`
-		ContainerPort int    `json:"container_port" binding:"required"`
-		Protocol      string `json:"protocol" binding:"required"`
-		Description   string `json:"description"`
+		ContainerName   string `json:"container_name" binding:"required"`
+		Interface       string `json:"interface" binding:"required"`
+		PublicIP        string `json:"public_ip" binding:"required"`
+		PublicPort      int    `json:"public_port" binding:"required"`
+		PublicPortEnd   int    `json:"public_port_end"`
+		ContainerPort   int    `json:"container_port" binding:"required"`
+		ContainerPortEnd int   `json:"container_port_end"`
+		Protocol        string `json:"protocol" binding:"required"`
+		Description     string `json:"description"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -60,8 +62,17 @@ func AllocatePortMapping(c *gin.Context) {
 	ctx := context.Background()
 	pmService := service.NewPortMappingService()
 
+	publicPortEnd := req.PublicPortEnd
+	if publicPortEnd == 0 {
+		publicPortEnd = req.PublicPort
+	}
+	containerPortEnd := req.ContainerPortEnd
+	if containerPortEnd == 0 {
+		containerPortEnd = req.ContainerPort
+	}
+
 	if version == "v4" {
-		mapping, err := pmService.AllocateV4Mapping(ctx, req.ContainerName, container.UserID, req.PublicIP, req.PublicIP, req.PublicPort, req.PublicPort, req.ContainerPort, req.ContainerPort, req.Protocol, req.Interface, req.Description)
+		mapping, err := pmService.AllocateV4Mapping(ctx, req.ContainerName, container.UserID, req.PublicIP, req.PublicIP, req.PublicPort, publicPortEnd, req.ContainerPort, containerPortEnd, req.Protocol, req.Interface, req.Description)
 		if err != nil {
 			logger.Error("分配IPv4端口映射失败: %v", err)
 			response.Error(c, 500, err.Error())
@@ -70,7 +81,7 @@ func AllocatePortMapping(c *gin.Context) {
 		logger.OK("系统API为容器 %s 分配IPv4端口映射: %s:%d -> %d", req.ContainerName, req.PublicIP, req.PublicPort, req.ContainerPort)
 		response.Success(c, gin.H{"mapping": mapping})
 	} else {
-		mapping, err := pmService.AllocateV6Mapping(ctx, req.ContainerName, container.UserID, req.PublicIP, req.PublicIP, req.PublicPort, req.PublicPort, req.ContainerPort, req.ContainerPort, req.Protocol, req.Interface, req.Description)
+		mapping, err := pmService.AllocateV6Mapping(ctx, req.ContainerName, container.UserID, req.PublicIP, req.PublicIP, req.PublicPort, publicPortEnd, req.ContainerPort, containerPortEnd, req.Protocol, req.Interface, req.Description)
 		if err != nil {
 			logger.Error("分配IPv6端口映射失败: %v", err)
 			response.Error(c, 500, err.Error())
@@ -102,12 +113,35 @@ func ReleasePortMapping(c *gin.Context) {
 	}
 
 	var req struct {
-		ID uint `json:"id" binding:"required"`
+		ID uint `json:"id"`
+		// 主控下发释放时不知道节点侧记录 ID，可用容器名+公网端口+协议定位
+		ContainerName string `json:"container_name"`
+		PublicPort    int    `json:"public_port"`
+		Protocol      string `json:"protocol"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, 400, "参数错误: "+err.Error())
 		return
+	}
+
+	if req.ID == 0 {
+		// 按字段匹配本节点上的映射记录
+		if version == "v4" {
+			var m models.PortMappingV4
+			if err := db.DB.Where("container_name = ? AND public_port = ? AND protocol = ?", req.ContainerName, req.PublicPort, req.Protocol).First(&m).Error; err != nil {
+				response.Error(c, 404, "映射记录不存在")
+				return
+			}
+			req.ID = m.ID
+		} else {
+			var m models.PortMappingV6
+			if err := db.DB.Where("container_name = ? AND public_port = ? AND protocol = ?", req.ContainerName, req.PublicPort, req.Protocol).First(&m).Error; err != nil {
+				response.Error(c, 404, "映射记录不存在")
+				return
+			}
+			req.ID = m.ID
+		}
 	}
 
 	pmService := service.NewPortMappingService()

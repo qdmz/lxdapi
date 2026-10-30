@@ -25,6 +25,7 @@
                 <span class="iconify" data-icon="mdi:ticket-percent-outline" data-width="20"></span>优惠券管理
             </h1>
             <p class="text-xs sm:text-sm text-gray-500 mt-1">创建优惠券，用户凭券码领取，下单时抵扣。</p>
+            <p class="text-xs text-gray-400 mt-1">规则说明：整张券全站最多被领取「发行总量」次；同一用户最多领取「每用户可领取次数」次，每张领取记录只能用一次（用完即核销）。点「统计」可看每张券的领取/使用记录明细。</p>
         </div>
         <button onclick="showEditModal()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">新建优惠券</button>
     </div>
@@ -39,7 +40,7 @@
                     <th class="px-4 py-3 text-left font-medium">类型</th>
                     <th class="px-4 py-3 text-left font-medium">面值</th>
                     <th class="px-4 py-3 text-left font-medium">最低金额</th>
-                    <th class="px-4 py-3 text-left font-medium">已用/总量</th>
+                    <th class="px-4 py-3 text-left font-medium">领取/已用（限领规则）</th>
                     <th class="px-4 py-3 text-left font-medium">有效期</th>
                     <th class="px-4 py-3 text-left font-medium">状态</th>
                     <th class="px-4 py-3 text-right font-medium">操作</th>
@@ -89,11 +90,11 @@
                 <input type="number" step="0.01" id="editMaxDiscount" value="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">发行总量（0=不限）</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1">发行总量（全站可领取次数，0=不限）</label>
                 <input type="number" id="editTotalCount" value="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">每用户限领（0=不限）</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1">每用户可领取次数（0=不限；每领一张可用一次）</label>
                 <input type="number" id="editPerUserLimit" value="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
             </div>
             <div>
@@ -111,6 +112,9 @@
                     <option value="disabled">停用</option>
                 </select>
             </div>
+            <div class="col-span-2 text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                规则：整张券全站最多被领取「发行总量」次；同一用户最多领取「每用户可领取次数」次，每张领取记录只能核销一次，所以每人实际可用次数就等于可领取次数。
+            </div>
             <div class="col-span-2">
                 <label class="block text-sm font-medium text-gray-700 mb-1">备注</label>
                 <input type="text" id="editRemark" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
@@ -119,6 +123,40 @@
         <div class="flex justify-end gap-2 p-4 border-t bg-gray-50 rounded-b-lg sticky bottom-0">
             <button onclick="closeModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg">取消</button>
             <button onclick="saveCoupon()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- 统计/记录弹窗 -->
+<div id="statsModal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background-color: rgba(0,0,0,0.5);">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
+            <h3 id="statsTitle" class="text-lg font-semibold text-gray-800">优惠券使用统计</h3>
+            <button onclick="closeStatsModal()" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div class="p-4">
+            <div id="statsSummary" class="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-2"></div>
+            <p id="statsLimits" class="text-xs text-gray-400 mb-4"></p>
+            <div class="overflow-x-auto border border-gray-200 rounded-lg">
+                <table class="min-w-full text-sm">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-600">
+                            <th class="px-3 py-2 text-left font-medium">用户</th>
+                            <th class="px-3 py-2 text-left font-medium">状态</th>
+                            <th class="px-3 py-2 text-left font-medium">领取时间</th>
+                            <th class="px-3 py-2 text-left font-medium">使用时间</th>
+                            <th class="px-3 py-2 text-left font-medium">订单号</th>
+                            <th class="px-3 py-2 text-right font-medium">抵扣额</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recordsTable"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="flex justify-end gap-2 p-4 border-t bg-gray-50 rounded-b-lg sticky bottom-0">
+            <button onclick="closeStatsModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg">关闭</button>
         </div>
     </div>
 </div>
@@ -137,6 +175,12 @@ function fmtTime(s) {
     return String(s).replace('T', ' ').substring(0, 16);
 }
 function typeLabel(t) { return t === 'percent' ? '百分比' : '固定金额'; }
+function limitLabel(v) { return (v && v > 0) ? (v + ' 次') : '不限'; }
+function recordStatusLabel(s) {
+    if (s === 'used') return '<span class="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">已使用</span>';
+    if (s === 'expired') return '<span class="px-2 py-0.5 rounded-full text-xs bg-gray-200 text-gray-600">已过期</span>';
+    return '<span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">未使用</span>';
+}
 function valueLabel(c) {
     if (c.type === 'percent') return c.value + '%';
     return '¥' + c.value;
@@ -165,7 +209,8 @@ function renderCoupons(list) {
             '<td class="px-4 py-3 text-gray-600">' + typeLabel(c.type) + '</td>' +
             '<td class="px-4 py-3 text-gray-600">' + valueLabel(c) + '</td>' +
             '<td class="px-4 py-3 text-gray-600">¥' + (c.min_amount || 0) + '</td>' +
-            '<td class="px-4 py-3 text-gray-600">' + (c.used_count || 0) + ' / ' + (c.total_count || '∞') + '</td>' +
+            '<td class="px-4 py-3 text-gray-600"><span id="claimed-' + id + '">领取 -</span> / 已用 ' + (c.used_count || 0) +
+                '<div class="text-xs text-gray-400 mt-0.5">全站可领 ' + limitLabel(c.total_count) + ' · 每人可领 ' + limitLabel(c.per_user_limit) + '，每张限用一次</div></td>' +
             '<td class="px-4 py-3 text-gray-500 text-xs">' + period + '</td>' +
             '<td class="px-4 py-3">' + statusBadge + '</td>' +
             '<td class="px-4 py-3 text-right whitespace-nowrap">' +
@@ -175,6 +220,16 @@ function renderCoupons(list) {
             '</td></tr>';
     });
     document.getElementById('couponTable').innerHTML = html;
+    // 每行的领取数从统计接口补齐（列表接口只有已用计数）
+    list.forEach(function (c) {
+        var id = c.id || c.ID;
+        $.get(API + '/' + id + '/stats', function (r) {
+            var el = document.getElementById('claimed-' + id);
+            if (el && r.code === 200 && r.data) {
+                el.textContent = '领取 ' + (r.data.claimed != null ? r.data.claimed : (r.data.total || 0));
+            }
+        });
+    });
 }
 
 function toLocalInput(s) {
@@ -268,11 +323,55 @@ function delCoupon(id) {
     });
 }
 function showStats(id) {
+    document.getElementById('statsSummary').innerHTML = '<p class="col-span-full text-sm text-gray-400">加载中...</p>';
+    document.getElementById('statsLimits').textContent = '';
+    document.getElementById('recordsTable').innerHTML = '<tr><td colspan="6" class="px-3 py-6 text-center text-gray-400">加载中...</td></tr>';
+    var m = document.getElementById('statsModal');
+    m.classList.remove('hidden'); m.classList.add('flex');
     $.get(API + '/' + id + '/stats', function (r) {
-        if (r.code === 200) {
-            alert('领取总数：' + (r.data.total || 0) + '\n已使用：' + (r.data.used || 0));
-        } else alert(r.msg || '获取失败');
+        if (r.code !== 200) { alert(r.msg || '获取统计失败'); closeStatsModal(); return; }
+        var d = r.data || {};
+        var items = [
+            ['领取总数', d.claimed != null ? d.claimed : (d.total || 0)],
+            ['未使用', d.unused || 0],
+            ['已使用', d.used || 0],
+            ['已过期', d.expired || 0],
+            ['使用人数', d.used_users || 0],
+            ['累计抵扣', '¥' + Number(d.total_discount || 0).toFixed(2)]
+        ];
+        document.getElementById('statsSummary').innerHTML = items.map(function (it) {
+            return '<div class="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-center">' +
+                '<div class="text-base font-semibold text-gray-800">' + it[1] + '</div>' +
+                '<div class="text-xs text-gray-400 mt-0.5">' + it[0] + '</div></div>';
+        }).join('');
+        document.getElementById('statsLimits').textContent =
+            '限领规则：全站可领取 ' + limitLabel(d.total_count) + '；每用户可领取 ' + limitLabel(d.per_user_limit) + '，每张领取记录只能核销一次。';
     });
+    $.get(API + '/' + id + '/records', function (r) {
+        if (r.code !== 200) {
+            document.getElementById('recordsTable').innerHTML = '<tr><td colspan="6" class="px-3 py-6 text-center text-gray-400">记录加载失败</td></tr>';
+            return;
+        }
+        var list = r.data || [];
+        if (!list.length) {
+            document.getElementById('recordsTable').innerHTML = '<tr><td colspan="6" class="px-3 py-6 text-center text-gray-400">暂无领取/使用记录</td></tr>';
+            return;
+        }
+        document.getElementById('recordsTable').innerHTML = list.map(function (rec) {
+            var user = rec.username ? esc(rec.username) : ('用户 #' + (rec.user_id || ''));
+            return '<tr class="border-t hover:bg-gray-50">' +
+                '<td class="px-3 py-2 text-gray-800">' + user + ' <span class="text-xs text-gray-400">(#' + (rec.user_id || '') + ')</span></td>' +
+                '<td class="px-3 py-2">' + recordStatusLabel(rec.status) + '</td>' +
+                '<td class="px-3 py-2 text-gray-500 text-xs">' + fmtTime(rec.created_at) + '</td>' +
+                '<td class="px-3 py-2 text-gray-500 text-xs">' + fmtTime(rec.used_at) + '</td>' +
+                '<td class="px-3 py-2 font-mono text-xs text-gray-700">' + esc(rec.order_no || '-') + '</td>' +
+                '<td class="px-3 py-2 text-right text-gray-700">' + (rec.discount_amount ? '¥' + Number(rec.discount_amount).toFixed(2) : '-') + '</td></tr>';
+        }).join('');
+    });
+}
+function closeStatsModal() {
+    var m = document.getElementById('statsModal');
+    m.classList.add('hidden'); m.classList.remove('flex');
 }
 loadCoupons();
 </script>

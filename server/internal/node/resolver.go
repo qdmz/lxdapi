@@ -43,3 +43,29 @@ func NodeIDForContainer(containerName string) uint {
 	}
 	return 0
 }
+
+// ResolveNodeIDForContainer 先查 containers 表的 node_id，没有再回退订单。
+func ResolveNodeIDForContainer(containerName string) uint {
+	var ct models.Container
+	if err := db.DB.Where("name = ?", containerName).First(&ct).Error; err == nil && ct.NodeID != 0 {
+		return ct.NodeID
+	}
+	return NodeIDForContainer(containerName)
+}
+
+// ClientForContainer 按容器归属返回对应节点的客户端。
+func ClientForContainer(containerName string) *lxc.Client {
+	return ClientForNode(ResolveNodeIDForContainer(containerName))
+}
+
+// IsRemoteNode 判断节点是否为远程节点（登记了 host）。
+func IsRemoteNode(nodeID uint) bool {
+	if nodeID == 0 {
+		return false
+	}
+	var n models.Node
+	if err := db.DB.First(&n, nodeID).Error; err != nil {
+		return false
+	}
+	return n.Host != ""
+}

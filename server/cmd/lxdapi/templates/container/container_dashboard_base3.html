@@ -247,6 +247,7 @@
             <span id="containerStatus"></span>
             <span id="containerIconBg"></span>
             <span id="containerImage"></span>
+            <span id="containerNode"></span>
         </div>
 
         <div class="flex overflow-x-auto pb-2 gap-2 no-scrollbar">
@@ -276,7 +277,7 @@
         <div id="tabContent">
             
             <div id="infoTab" class="space-y-5 sm:space-y-6">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <div class="md-card md-surface p-5 relative overflow-hidden group">
                         <div class="absolute -top-4 -right-4 opacity-5 group-hover:opacity-10 transition">
                             <span class="iconify w-24 h-24" style="color: var(--md-primary);" data-icon="heroicons:globe-alt"></span>
@@ -319,6 +320,19 @@
                                 <span class="iconify w-4 h-4" style="color: var(--md-primary);" data-icon="heroicons:document-duplicate"></span>
                             </button>
                         </div>
+                    </div>
+                    <!-- Expiry -->
+                    <div id="containerExpireCard" class="md-card md-surface p-5 relative overflow-hidden group" style="display:none;">
+                        <div class="absolute -top-4 -right-4 opacity-5 group-hover:opacity-10 transition">
+                            <span class="iconify w-24 h-24" style="color: var(--md-primary);" data-icon="heroicons:calendar"></span>
+                        </div>
+                        <div class="flex items-center gap-2 mb-3">
+                            <div class="md-icon-container" style="background-color: var(--md-primary-container);">
+                                <span class="iconify w-5 h-5" style="color: var(--md-on-primary-container);" data-icon="heroicons:calendar"></span>
+                            </div>
+                            <span class="text-sm font-medium" style="color: var(--md-on-surface-variant);">到期时间</span>
+                        </div>
+                        <p id="containerExpire" class="text-sm font-mono font-medium break-all" style="color: var(--md-on-surface);">-</p>
                     </div>
                 </div>
 
@@ -842,7 +856,22 @@
             $('#containerIconBg').removeClass('from-blue-500 to-blue-600 from-green-500 to-green-600 from-gray-500 to-gray-600 from-yellow-500 to-yellow-600').addClass('bg-gradient-to-br ' + iconClass);
             
             $('#containerImage').text(c.image || '未知镜像');
+            $('#containerNode').text(c.node_name || '-');
             $('#containerPassword').text(c.password || '-');
+            // 到期时间（最近一笔 active 订单，无订单数据时整卡隐藏）
+            if (c.expire_at) {
+                const expDate = String(c.expire_at).slice(0, 10);
+                let expHtml = expDate;
+                if (c.days_left !== null && c.days_left !== undefined) {
+                    if (c.days_left < 0) expHtml = expDate + ' <span class="text-red-600 font-semibold">已过期</span>';
+                    else if (c.days_left === 0) expHtml = expDate + ' <span class="text-amber-600 font-semibold">今天到期</span>';
+                    else expHtml = expDate + '（剩 ' + c.days_left + ' 天）';
+                }
+                $('#containerExpire').html(expHtml);
+                $('#containerExpireCard').show();
+            } else {
+                $('#containerExpireCard').hide();
+            }
 
             $('#containerIPv4').text(c.ipv4 && c.ipv4.length > 0 ? c.ipv4.join('\n') : '无');
             $('#containerIPv6').text(c.ipv6 && c.ipv6.length > 0 ? c.ipv6.join('\n') : '无');

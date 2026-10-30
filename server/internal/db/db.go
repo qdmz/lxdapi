@@ -51,6 +51,19 @@ func Init() error {
 		return err
 	}
 
+	// 存储池唯一性从「name 全局唯一」升级为「(node_id, name) 复合唯一」：
+	// 先删旧的单列唯一索引，AutoMigrate 会按新标签建复合索引；
+	// 否则不同节点的同名池（如各节点的 default）会互相抢占同一行。
+	if DB.Migrator().HasTable(&models.StoragePool{}) && DB.Migrator().HasIndex(&models.StoragePool{}, "idx_storage_pools_name") {
+		_ = DB.Migrator().DropIndex(&models.StoragePool{}, "idx_storage_pools_name")
+	}
+
+	// 模板唯一性同理：从「fingerprint 全局唯一」升级为「(node_id, fingerprint) 复合唯一」，
+	// 否则同一镜像在多个节点同步时会互相抢占同一行。
+	if DB.Migrator().HasTable(&models.Template{}) && DB.Migrator().HasIndex(&models.Template{}, "idx_templates_fingerprint") {
+		_ = DB.Migrator().DropIndex(&models.Template{}, "idx_templates_fingerprint")
+	}
+
 	err = DB.AutoMigrate(
 		&models.Container{},
 		&models.User{},
@@ -100,7 +113,7 @@ func Init() error {
 func migrateUserBalance(gdb *gorm.DB) {
 	type colDef struct {
 		name string
-	 ddl  string
+		ddl  string
 	}
 	cols := []colDef{
 		{"balance", "ALTER TABLE users ADD COLUMN balance REAL DEFAULT 0"},
@@ -114,4 +127,3 @@ func migrateUserBalance(gdb *gorm.DB) {
 		}
 	}
 }
-

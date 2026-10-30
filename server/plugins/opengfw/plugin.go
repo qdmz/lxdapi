@@ -3,6 +3,7 @@ package opengfw
 import (
 	"fmt"
 	"lxdapi/internal/db"
+	"lxdapi/internal/middleware"
 	"lxdapi/models"
 	"lxdapi/pkg/logger"
 	"lxdapi/pkg/plugin"
@@ -146,6 +147,21 @@ func (p *OpenGFWPlugin) RegisterRoutes(r *gin.Engine) {
 		adminAPI.POST("/restart", api.RestartService)
 		adminAPI.GET("/logs", api.GetLogs)
 		adminAPI.DELETE("/logs", api.ClearLogs)
+	}
+
+	// 节点系统端点：主控把远程节点的防火墙操作下发到这里，在本机执行（X-API-Hash 鉴权）
+	sysAPI := r.Group("/api/system/firewall")
+	sysAPI.Use(middleware.SystemAuth())
+	{
+		sysAPI.GET("/config", api.GetConfig)
+		sysAPI.PUT("/config", api.UpdateConfig)
+		sysAPI.POST("/apply", api.ApplyConfig)
+		sysAPI.GET("/status", api.GetStatus)
+		sysAPI.POST("/start", api.StartService)
+		sysAPI.POST("/stop", api.StopService)
+		sysAPI.POST("/restart", api.RestartService)
+		sysAPI.GET("/logs", api.GetLogs)
+		sysAPI.DELETE("/logs", api.ClearLogs)
 	}
 }
 

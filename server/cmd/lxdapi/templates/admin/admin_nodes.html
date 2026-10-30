@@ -126,9 +126,71 @@
     </div>
 </div>
 
+<!-- 镜像管理模态 -->
+<div id="imageModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white">
+            <h3 class="text-base font-semibold text-gray-800">镜像管理 - <span id="imgNodeName"></span></h3>
+            <button onclick="closeImages()" class="text-gray-400 hover:text-gray-600">
+                <span class="iconify" data-icon="mdi:close" data-width="20"></span>
+            </button>
+        </div>
+        <div class="px-5 py-4 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                <div class="border border-gray-200 rounded-lg p-3">
+                    <div class="font-medium text-gray-700 mb-2">下载镜像（从镜像仓库）</div>
+                    <select id="imgRemote" class="w-full px-2 py-1.5 border border-gray-300 rounded-lg mb-2 bg-white">
+                        <option value="images">images（官方社区仓库）</option>
+                        <option value="ubuntu">ubuntu（官方）</option>
+                    </select>
+                    <input id="imgCopyName" class="w-full px-2 py-1.5 border border-gray-300 rounded-lg mb-2" placeholder="镜像名，如 debian/13 或 ubuntu/24.04">
+                    <input id="imgCopyAlias" class="w-full px-2 py-1.5 border border-gray-300 rounded-lg mb-2" placeholder="下载后别名（可选，如 debian-13）">
+                    <button onclick="imgCopy()" class="w-full px-3 py-1.5 text-white bg-blue-600 hover:bg-blue-700 rounded-lg">下载到节点</button>
+                    <div class="mt-2 pt-2 border-t border-gray-100">
+                        <button onclick="loadRemoteCatalog()" class="w-full px-3 py-1.5 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg">加载远程目录（点选）</button>
+                        <input id="imgCatalogFilter" class="hidden w-full px-2 py-1.5 border border-gray-300 rounded-lg mt-2" placeholder="搜索系统名 / 别名，如 ubuntu" oninput="renderImgCatalog()">
+                        <div id="imgCatalog" class="mt-2 text-xs text-gray-400">点上方按钮拉取该节点可下载的系统列表，点选一行即可回填到上方，不用手敲镜像名。</div>
+                    </div>
+                </div>
+                <div class="border border-gray-200 rounded-lg p-3">
+                    <div class="font-medium text-gray-700 mb-2">从容器生成镜像</div>
+                    <input id="imgPubContainer" class="w-full px-2 py-1.5 border border-gray-300 rounded-lg mb-2" placeholder="容器名">
+                    <input id="imgPubAlias" class="w-full px-2 py-1.5 border border-gray-300 rounded-lg mb-2" placeholder="新镜像别名">
+                    <button onclick="imgPublish()" class="w-full px-3 py-1.5 text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg">生成镜像</button>
+                </div>
+                <div class="border border-gray-200 rounded-lg p-3">
+                    <div class="font-medium text-gray-700 mb-2">从 URL 导入镜像包</div>
+                    <input id="imgImportUrl" class="w-full px-2 py-1.5 border border-gray-300 rounded-lg mb-2" placeholder="https://…/image.tar.gz">
+                    <input id="imgImportAlias" class="w-full px-2 py-1.5 border border-gray-300 rounded-lg mb-2" placeholder="别名（可选）">
+                    <button onclick="imgImport()" class="w-full px-3 py-1.5 text-white bg-teal-600 hover:bg-teal-700 rounded-lg">导入</button>
+                </div>
+            </div>
+            <div id="imgStatus" class="hidden text-sm rounded-lg px-3 py-2"></div>
+            <div class="overflow-x-auto border border-gray-200 rounded-lg">
+                <table class="min-w-full text-sm">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-600">
+                            <th class="px-3 py-2 text-left font-medium">名称</th>
+                            <th class="px-3 py-2 text-left font-medium">别名</th>
+                            <th class="px-3 py-2 text-left font-medium">指纹</th>
+                            <th class="px-3 py-2 text-left font-medium">大小</th>
+                            <th class="px-3 py-2 text-left font-medium">上传时间</th>
+                            <th class="px-3 py-2 text-right font-medium">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="imageTable"></tbody>
+                </table>
+            </div>
+            <p class="text-xs text-gray-400">下载 / 生成 / 导入可能需要几分钟，请勿关闭弹窗。删除镜像前请确认没有产品正在使用它。</p>
+        </div>
+    </div>
+</div>
+
 <script>
 var API = '/api/admin';
 var editingNode = null;
+var imgNodeId = null;
+var nodeNameMap = {};
 
 function showAlert(type, msg) {
     var el = document.getElementById('alertBox');
@@ -163,16 +225,18 @@ function renderNodes(nodes) {
         tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-400">暂无节点</td></tr>';
         return;
     }
+    nodes.forEach(function (n) { nodeNameMap[n.id || n.ID] = n.name; });
     tbody.innerHTML = nodes.map(function (n) {
         return '<tr class="border-t border-gray-100 hover:bg-gray-50">' +
             '<td class="px-4 py-3 text-gray-500">' + (n.id || n.ID) + '</td>' +
             '<td class="px-4 py-3 font-medium text-gray-800">' + esc(n.name) + '</td>' +
             '<td class="px-4 py-3 text-gray-600">' + esc(n.region || '-') + '</td>' +
             '<td class="px-4 py-3 text-gray-600">' + (esc(n.host || '-') + (n.api_port ? ':' + n.api_port : '')) + '</td>' +
-            '<td class="px-4 py-3 text-gray-600">' + esc(n.image || '-') + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + esc(n.image_display_name || n.image || '-') + '</td>' +
             '<td class="px-4 py-3">' + statusBadge(n.status || 'online') + '</td>' +
             '<td class="px-4 py-3 text-gray-600">' + n.sort + '</td>' +
             '<td class="px-4 py-3 text-right whitespace-nowrap">' +
+                '<button onclick="openImages(' + (n.id || n.ID) + ')" class="text-purple-600 hover:underline text-sm mr-3">镜像</button>' +
                 '<button onclick="testNode(' + (n.id || n.ID) + ')" class="text-green-600 hover:underline text-sm mr-3">测试</button>' +
                 '<button onclick="editNode(' + (n.id || n.ID) + ')" class="text-blue-600 hover:underline text-sm mr-3">编辑</button>' +
                 '<button onclick="delNode(' + (n.id || n.ID) + ')" class="text-red-500 hover:underline text-sm">删除</button>' +
@@ -269,6 +333,175 @@ function delNode(id) {
     $.ajax({ url: API + '/nodes/' + id, type: 'DELETE',
         success: function (r) { if (r.code === 200) { showAlert('success', '已删除'); loadNodes(); } else showAlert('error', r.msg || '删除失败'); },
         error: function () { showAlert('error', '请求失败'); } });
+}
+
+function fmtSize(b) {
+    if (!b) return '-';
+    var u = ['B', 'KB', 'MB', 'GB'], i = 0, v = b;
+    while (v >= 1024 && i < 3) { v /= 1024; i++; }
+    return v.toFixed(1) + ' ' + u[i];
+}
+function imgMsg(type, msg) {
+    var el = document.getElementById('imgStatus');
+    el.className = 'text-sm rounded-lg px-3 py-2 ' + (type === 'success' ? 'bg-green-50 text-green-700' : type === 'error' ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700');
+    el.textContent = msg;
+}
+function openImages(id) {
+    imgNodeId = id;
+    document.getElementById('imgNodeName').textContent = nodeNameMap[id] || ('节点#' + id);
+    imgCatalogData = [];
+    imgCatalogSel = -1;
+    var cf = document.getElementById('imgCatalogFilter');
+    cf.classList.add('hidden'); cf.value = '';
+    var cb = document.getElementById('imgCatalog');
+    cb.className = 'mt-2 text-xs text-gray-400';
+    cb.textContent = '点上方按钮拉取该节点可下载的系统列表，点选一行即可回填到上方，不用手敲镜像名。';
+    var m = document.getElementById('imageModal');
+    m.classList.remove('hidden'); m.classList.add('flex');
+    loadImages();
+}
+function closeImages() {
+    var m = document.getElementById('imageModal');
+    m.classList.add('hidden'); m.classList.remove('flex');
+}
+function loadImages() {
+    document.getElementById('imageTable').innerHTML = '<tr><td colspan="6" class="px-3 py-6 text-center text-gray-400">加载中…</td></tr>';
+    $.get(API + '/nodes/' + imgNodeId + '/images', function (r) {
+        if (r.code !== 200) {
+            document.getElementById('imageTable').innerHTML = '<tr><td colspan="6" class="px-3 py-6 text-center text-red-500">' + esc(r.msg || '加载失败') + '</td></tr>';
+            return;
+        }
+        var list = r.data || [];
+        if (!list.length) {
+            document.getElementById('imageTable').innerHTML = '<tr><td colspan="6" class="px-3 py-6 text-center text-gray-400">该节点暂无镜像，可在上方下载 / 生成 / 导入</td></tr>';
+            return;
+        }
+        document.getElementById('imageTable').innerHTML = list.map(function (img) {
+            var fp = img.fingerprint || '';
+            var aliases = (img.aliases || []).map(function (a) {
+                return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700 mr-1">' + esc(a.name) +
+                    '<a href="javascript:void(0)" onclick="imgDelAlias(\'' + esc(a.name) + '\')" class="text-blue-400 hover:text-red-500">×</a></span>';
+            }).join('');
+            return '<tr class="border-t border-gray-100 hover:bg-gray-50">' +
+                '<td class="px-3 py-2 text-gray-800">' + esc(img.display_name || fp) + '</td>' +
+                '<td class="px-3 py-2">' + (aliases || '<span class="text-gray-300">-</span>') + '</td>' +
+                '<td class="px-3 py-2 font-mono text-xs text-gray-500" title="' + fp + '">' + fp.substring(0, 12) + '…</td>' +
+                '<td class="px-3 py-2 text-gray-600">' + fmtSize(img.size) + '</td>' +
+                '<td class="px-3 py-2 text-gray-500 text-xs">' + esc(String(img.uploaded_at || img.created_at || '-').replace('T', ' ').substring(0, 16)) + '</td>' +
+                '<td class="px-3 py-2 text-right whitespace-nowrap">' +
+                    '<button onclick="imgAddAlias(\'' + fp + '\')" class="text-blue-600 hover:underline text-sm mr-3">加别名</button>' +
+                    '<button onclick="imgDelete(\'' + fp + '\')" class="text-red-500 hover:underline text-sm">删除</button>' +
+                '</td></tr>';
+        }).join('');
+    }).fail(function () {
+        document.getElementById('imageTable').innerHTML = '<tr><td colspan="6" class="px-3 py-6 text-center text-red-500">请求失败</td></tr>';
+    });
+}
+function imgPost(path, data, busyText) {
+    imgMsg('info', busyText || '处理中，请稍候…');
+    $.ajax({ url: API + '/nodes/' + imgNodeId + '/images' + path, type: 'POST', contentType: 'application/json', data: JSON.stringify(data),
+        success: function (r) {
+            if (r.code === 200) { imgMsg('success', r.data && r.data.message ? r.data.message : '操作成功'); loadImages(); }
+            else imgMsg('error', r.msg || '操作失败');
+        },
+        error: function (xhr) {
+            var m = '请求失败';
+            try { m = JSON.parse(xhr.responseText).msg || m; } catch (e) {}
+            imgMsg('error', m);
+        } });
+}
+var imgCatalogData = [];
+var imgCatalogSel = -1;
+function loadRemoteCatalog() {
+    var box = document.getElementById('imgCatalog');
+    box.className = 'mt-2 text-xs text-gray-400';
+    box.textContent = '正在向镜像源获取目录，可能需要几十秒…';
+    $.get('/api/admin/remote-images?node_id=' + imgNodeId, function (r) {
+        if (r.code !== 200) {
+            box.className = 'mt-2 text-xs text-red-500';
+            box.textContent = '远程目录加载失败：' + (r.msg || '未知错误');
+            return;
+        }
+        imgCatalogData = (r.data && r.data.images) || [];
+        imgCatalogSel = -1;
+        if (!imgCatalogData.length) {
+            box.className = 'mt-2 text-xs text-gray-400';
+            box.textContent = '远程目录为空：该节点未查到可下载的系统镜像。';
+            return;
+        }
+        document.getElementById('imgCatalogFilter').classList.remove('hidden');
+        renderImgCatalog();
+    }).fail(function () {
+        box.className = 'mt-2 text-xs text-red-500';
+        box.textContent = '远程目录加载失败：请求出错，请稍后重试。';
+    });
+}
+function renderImgCatalog() {
+    var kw = document.getElementById('imgCatalogFilter').value.trim().toLowerCase();
+    var box = document.getElementById('imgCatalog');
+    var list = imgCatalogData.filter(function (img) {
+        if (!kw) return true;
+        return (String(img.name || '') + ' ' + String(img.alias || '')).toLowerCase().indexOf(kw) >= 0;
+    });
+    if (!list.length) {
+        box.className = 'mt-2 text-xs text-gray-400';
+        box.textContent = '没有匹配的镜像。';
+        return;
+    }
+    box.className = 'mt-2 max-h-56 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-50';
+    box.innerHTML = list.map(function (img) {
+        var idx = imgCatalogData.indexOf(img);
+        return '<div onclick="pickRemoteImage(' + idx + ')" class="px-2 py-1.5 cursor-pointer hover:bg-blue-50 ' + (idx === imgCatalogSel ? 'bg-blue-50' : '') + '">' +
+            '<div class="flex items-center justify-between gap-2"><span class="text-sm text-gray-800 truncate">' + esc(img.name || img.alias) + '</span>' +
+            '<span class="text-gray-400 whitespace-nowrap">' + fmtSize(img.size) + '</span></div>' +
+            '<div class="text-gray-400 truncate">' + esc(img.alias) + ' · ' + esc(img.remote || 'images') + (img.architecture ? ' · ' + esc(img.architecture) : '') + '</div></div>';
+    }).join('');
+}
+function pickRemoteImage(idx) {
+    var img = imgCatalogData[idx];
+    if (!img) return;
+    imgCatalogSel = idx;
+    var remote = img.remote || 'images';
+    var sel = document.getElementById('imgRemote');
+    var found = false;
+    for (var i = 0; i < sel.options.length; i++) { if (sel.options[i].value === remote) { found = true; break; } }
+    if (!found) { var o = document.createElement('option'); o.value = remote; o.textContent = remote; sel.appendChild(o); }
+    sel.value = remote;
+    document.getElementById('imgCopyName').value = img.alias || '';
+    document.getElementById('imgCopyAlias').value = String(img.alias || '').replace(/\//g, '-');
+    renderImgCatalog();
+    imgMsg('info', '已选择「' + (img.name || img.alias) + '」，点「下载到节点」开始下载。');
+}
+function imgCopy() {
+    var name = document.getElementById('imgCopyName').value.trim();
+    if (!name) { imgMsg('error', '请填写镜像名'); return; }
+    imgPost('/copy', { remote: document.getElementById('imgRemote').value, image: name, alias: document.getElementById('imgCopyAlias').value.trim(), copy_aliases: true }, '正在从仓库下载镜像，可能需要几分钟…');
+}
+function imgPublish() {
+    var cn = document.getElementById('imgPubContainer').value.trim();
+    if (!cn) { imgMsg('error', '请填写容器名'); return; }
+    imgPost('/publish', { container: cn, alias: document.getElementById('imgPubAlias').value.trim() }, '正在从容器生成镜像…');
+}
+function imgImport() {
+    var u = document.getElementById('imgImportUrl').value.trim();
+    if (!u) { imgMsg('error', '请填写镜像包 URL'); return; }
+    imgPost('/import', { url: u, alias: document.getElementById('imgImportAlias').value.trim() }, '正在导入镜像，可能需要几分钟…');
+}
+function imgDelete(fp) {
+    if (!confirm('确定删除该镜像？正在被产品引用的镜像删除后将无法开通新容器。')) return;
+    imgMsg('info', '正在删除…');
+    $.ajax({ url: API + '/nodes/' + imgNodeId + '/images/' + fp, type: 'DELETE',
+        success: function (r) { if (r.code === 200) { imgMsg('success', '镜像已删除'); loadImages(); } else imgMsg('error', r.msg || '删除失败'); },
+        error: function () { imgMsg('error', '请求失败'); } });
+}
+function imgAddAlias(fp) {
+    var name = prompt('输入新别名（如 debian-13）：');
+    if (!name) return;
+    imgPost('/alias', { fingerprint: fp, name: name.trim() }, '正在添加别名…');
+}
+function imgDelAlias(name) {
+    if (!confirm('确定删除别名 ' + name + '？')) return;
+    imgPost('/alias/delete', { name: name }, '正在删除别名…');
 }
 
 loadNodes();

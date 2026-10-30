@@ -325,7 +325,14 @@ func (c *Client) ContainerExists(ctx context.Context, name string) bool {
 
 func (c *Client) ExecInContainer(ctx context.Context, name string, cmd []string) (string, error) {
 	if c.ep.Remote {
-		return "", fmt.Errorf("远程节点暂不支持容器内执行命令")
+		// 下发到节点执行（节点系统端点用其本机 LXD exec）；这是显式路由，不是静默回退
+		var data struct {
+			Output string `json:"output"`
+		}
+		if err := c.remoteDo(ctx, "POST", "/api/system/containers/"+name+"/exec", map[string]interface{}{"command": cmd}, &data); err != nil {
+			return "", err
+		}
+		return data.Output, nil
 	}
 	args := append([]string{"exec", name, "--"}, cmd...)
 	return c.exec(ctx, args...)
@@ -535,7 +542,8 @@ func (c *Client) GetContainerIPv6(ctx context.Context, name string) (string, err
 
 func (c *Client) SetContainerDNS(ctx context.Context, name string, dnsServers []string) error {
 	if c.ep.Remote {
-		return fmt.Errorf("远程节点暂不支持设置 DNS")
+		// 下发到节点执行（节点侧有同名系统端点，用其本机 exec 写 resolv.conf）
+		return c.remoteDo(ctx, "POST", "/api/system/containers/"+name+"/dns", map[string]interface{}{"dns": dnsServers}, nil)
 	}
 	if len(dnsServers) == 0 {
 		return fmt.Errorf("DNS服务器列表不能为空")
@@ -557,6 +565,15 @@ func (c *Client) SetContainerDNS(ctx context.Context, name string, dnsServers []
 }
 
 func (c *Client) GetContainerDNS(ctx context.Context, name string) ([]string, error) {
+	if c.ep.Remote {
+		var data struct {
+			DNS []string `json:"dns"`
+		}
+		if err := c.remoteDo(ctx, "GET", "/api/system/containers/"+name+"/dns", nil, &data); err != nil {
+			return nil, err
+		}
+		return data.DNS, nil
+	}
 	output, err := c.ExecInContainer(ctx, name, []string{"cat", "/etc/resolv.conf"})
 	if err != nil {
 		return nil, fmt.Errorf("获取DNS失败: %v", err)

@@ -100,8 +100,8 @@
                 if (r.code === 200 && r.data) {
                     const sel = document.getElementById('nodeSelector');
                     const current = sel.value;
-                    sel.innerHTML = '<option value="">全部节点</option>' + r.data.map(n => 
-                        `<option value="${n.id}">${n.name}</option>`).join('');
+                    sel.innerHTML = '<option value="">全部节点</option>' + r.data.map(n =>
+                        `<option value="${n.id || n.ID}">${n.name}</option>`).join('');
                     if (current) sel.value = current;
                 }
             });
@@ -230,8 +230,9 @@
         function savePriority() {
             const priority = parseInt($('#priorityInput').val()) || 0;
             
+            const nodeId = document.getElementById('nodeSelector').value;
             $.ajax({
-                url: `/api/admin/storage-pools/${encodeURIComponent(currentPoolName)}/priority`,
+                url: `/api/admin/storage-pools/${encodeURIComponent(currentPoolName)}/priority` + (nodeId ? `?node_id=${nodeId}` : ''),
                 type: 'PUT',
                 contentType: 'application/json',
                 data: JSON.stringify({ priority: priority }),

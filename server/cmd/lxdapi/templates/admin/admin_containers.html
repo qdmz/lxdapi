@@ -103,10 +103,17 @@
                     <span class="text-xs text-gray-600">排序:</span>
                     <select id="sortField" onchange="changeSorting()" class="select select-bordered select-xs outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                         <option value="">默认</option>
+                        <option value="node">节点</option>
                         <option value="cpu">CPU</option>
                         <option value="memory">内存</option>
                         <option value="disk">磁盘</option>
                         <option value="traffic">流量</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-600">节点筛选:</span>
+                    <select id="nodeFilter" onchange="changeNodeFilter()" class="select select-bordered select-xs outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">全部节点</option>
                     </select>
                 </div>
                 <div class="flex items-center gap-2" id="sortOrderContainer" style="display: none;">
@@ -205,9 +212,15 @@
                                 </div>
                             </div>
                             <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">所属节点 <span class="text-red-500">*</span></label>
+                                <select name="node_id" id="selectNode" required class="select select-bordered select-sm w-full outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="">请选择节点</option>
+                                </select>
+                            </div>
+                            <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">镜像 <span class="text-red-500">*</span></label>
                                 <select name="image" id="selectImage" required class="select select-bordered select-sm w-full outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                                    <option value="">请选择镜像</option>
+                                    <option value="">请先选择节点</option>
                                 </select>
                             </div>
                             <div>
@@ -377,6 +390,42 @@
         
         let sortField = '';
         let sortOrder = 'asc';
+        let nodeFilter = '';
+
+        // 容器归属节点的有效 ID：node_id=0 是早期本机容器的历史值，与本机节点 1 等价
+        function containerNodeId(c) {
+            return c.node_id ? c.node_id : 1;
+        }
+
+        // 按当前容器数据重建节点筛选下拉（带每节点容器数），保留已选值
+        function populateNodeFilter() {
+            const counts = {};
+            const names = {};
+            containersData.forEach(c => {
+                const id = containerNodeId(c);
+                counts[id] = (counts[id] || 0) + 1;
+                if (c.node_name) names[id] = c.node_name;
+            });
+            let html = '<option value="">全部节点</option>';
+            Object.keys(counts).sort((a, b) => a - b).forEach(id => {
+                const label = names[id] || ('节点 ' + id);
+                html += `<option value="${id}">${label} (${counts[id]})</option>`;
+            });
+            $('#nodeFilter').html(html);
+            if (nodeFilter && counts[nodeFilter]) {
+                $('#nodeFilter').val(nodeFilter);
+            } else {
+                nodeFilter = '';
+                $('#nodeFilter').val('');
+            }
+        }
+
+        function changeNodeFilter() {
+            nodeFilter = $('#nodeFilter').val();
+            currentPage = 1;
+            applyFiltersAndSort();
+            renderContainers();
+        }
 
         $(document).ready(function() {
             loadContainers();
@@ -392,6 +441,7 @@
                 success: function(result) {
                     if (result.code === 200) {
                         containersData = result.data.data || [];
+                        populateNodeFilter();
                         applyFiltersAndSort();
                         renderContainers();
                     } else {
@@ -410,11 +460,21 @@
 
         function applyFiltersAndSort() {
             filteredData = [...containersData];
-            
+
+            if (nodeFilter) {
+                filteredData = filteredData.filter(c => String(containerNodeId(c)) === String(nodeFilter));
+            }
+
             if (sortField) {
                 filteredData.sort((a, b) => {
+                    if (sortField === 'node') {
+                        const cmp = String(a.node_name || '').localeCompare(String(b.node_name || ''), 'zh')
+                            || (containerNodeId(a) - containerNodeId(b))
+                            || String(a.name || '').localeCompare(String(b.name || ''));
+                        return sortOrder === 'asc' ? cmp : -cmp;
+                    }
                     let valueA, valueB;
-                    
+
                     switch(sortField) {
                         case 'cpu':
                             valueA = a.cpu_usage || 0;
@@ -547,6 +607,10 @@
                                     <span class="text-gray-600">流量</span>
                                     <span class="font-medium text-gray-800">${trafficDisplay}</span>
                                 </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-gray-600">节点</span>
+                                    <span class="font-medium text-gray-800">${c.node_name || '-'}</span>
+                                </div>
                             </div>
                             <div class="flex gap-2">
                                 <a href="/admin/containers/${c.name}" class="flex-1 px-2 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded transition text-center block">详情</a>
@@ -577,6 +641,7 @@
                                     </th>
                                     <th class="text-xs text-gray-600">主机名</th>
                                     <th class="text-xs text-gray-600">备注</th>
+                                    <th class="text-xs text-gray-600">节点</th>
                                     <th class="text-xs text-gray-600">状态</th>
                                     <th class="text-xs text-gray-600">CPU</th>
                                     <th class="text-xs text-gray-600">内存</th>
@@ -631,6 +696,7 @@
                         </td>
                         <td><span class="font-semibold text-gray-800 text-xs">${c.name}</span></td>
                         <td>${remarkBadge}</td>
+                        <td class="text-xs text-gray-700">${c.node_name || '-'}</td>
                         <td>${statusBadge}</td>
                         <td class="text-xs text-gray-700">${(c.cpu_usage || 0).toFixed(1)}% / ${c.cpu || 1}核</td>
                         <td class="text-xs text-gray-700">${memoryDisplay}</td>
@@ -1183,24 +1249,62 @@
         function showCreateModal() {
             $('#createModal').removeClass('hidden');
             $('body').addClass('overflow-hidden');
-            loadTemplateList();
+            loadNodeList();
         }
-        
-        function loadTemplateList() {
+
+        function loadNodeList() {
             $.ajax({
-                url: '/api/admin/templates',
+                url: '/api/admin/nodes',
+                type: 'GET',
+                success: function(result) {
+                    if (result.code === 200 && result.data) {
+                        let options = '<option value="">请选择节点</option>';
+                        result.data.forEach(n => {
+                            const id = n.id || n.ID;
+                            const off = n.status && n.status !== 'online' ? '（离线）' : '';
+                            options += `<option value="${id}">${n.name}${off}</option>`;
+                        });
+                        $('#selectNode').html(options);
+                        // 默认选第一个节点并加载它的镜像
+                        const first = result.data[0];
+                        if (first) {
+                            const fid = first.id || first.ID;
+                            $('#selectNode').val(fid);
+                            loadTemplateList(fid);
+                        }
+                    }
+                },
+                error: function() {
+                    $('#selectNode').html('<option value="">加载节点失败</option>');
+                }
+            });
+        }
+
+        // 镜像必须与所选节点匹配：只列该节点的模板，该节点没同步过模板时自动同步一次
+        function loadTemplateList(nodeId) {
+            $('#selectImage').html('<option value="">加载中...</option>');
+            $.ajax({
+                url: '/api/admin/templates?node_id=' + nodeId,
                 type: 'GET',
                 success: function(result) {
                     if (result.code === 200 && result.data.templates) {
                         const templates = result.data.templates;
+                        if (!templates.length && !loadTemplateList._syncedFor) {
+                            loadTemplateList._syncedFor = {};
+                        }
+                        if (!templates.length && !(loadTemplateList._syncedFor || {})[nodeId]) {
+                            loadTemplateList._syncedFor[nodeId] = true;
+                            $.ajax({ url: '/api/admin/templates/sync?node_id=' + nodeId, type: 'POST',
+                                success: function() { loadTemplateList(nodeId); },
+                                error: function() { $('#selectImage').html('<option value="">该节点暂无可用镜像</option>'); } });
+                            return;
+                        }
                         let options = '<option value="">请选择镜像</option>';
-                        
                         templates.forEach(t => {
-                            const label = t.alias || t.fingerprint.substring(0, 12);
-                            const osInfo = t.os && t.release ? ` (${t.os} ${t.release})` : '';
-                            options += `<option value="${t.alias || t.fingerprint}">${label}${osInfo}</option>`;
+                            const label = t.alias || t.description || (t.os && t.release ? `${t.os} ${t.release}` : t.fingerprint.substring(0, 12));
+                            options += `<option value="${t.alias || t.fingerprint}">${label}</option>`;
                         });
-                        
+                        if (!templates.length) options = '<option value="">该节点暂无可用镜像</option>';
                         $('#selectImage').html(options);
                     } else {
                         $('#selectImage').html('<option value="">无可用镜像，请先同步模板</option>');
@@ -1211,6 +1315,12 @@
                 }
             });
         }
+
+        $(document).on('change', '#selectNode', function() {
+            const nid = $(this).val();
+            if (nid) loadTemplateList(nid);
+            else $('#selectImage').html('<option value="">请先选择节点</option>');
+        });
 
         function hideCreateModal() {
             $('#createModal').addClass('hidden');
@@ -1270,7 +1380,7 @@
             
 
             formData.forEach(item => {
-                if (item.name === 'cpu' || item.name === 'memory' || item.name === 'disk' || item.name === 'ingress' || item.name === 'egress' || item.name === 'traffic_limit' || item.name === 'ipv4_pool_limit' || item.name === 'ipv4_mapping_limit' || item.name === 'ipv6_pool_limit' || item.name === 'ipv6_mapping_limit' || item.name === 'reverse_proxy_limit' || item.name === 'cpu_allowance' || item.name === 'io_read' || item.name === 'io_write' || item.name === 'processes_limit') {
+                if (item.name === 'node_id' || item.name === 'cpu' || item.name === 'memory' || item.name === 'disk' || item.name === 'ingress' || item.name === 'egress' || item.name === 'traffic_limit' || item.name === 'ipv4_pool_limit' || item.name === 'ipv4_mapping_limit' || item.name === 'ipv6_pool_limit' || item.name === 'ipv6_mapping_limit' || item.name === 'reverse_proxy_limit' || item.name === 'cpu_allowance' || item.name === 'io_read' || item.name === 'io_write' || item.name === 'processes_limit') {
                     data[item.name] = parseInt(item.value) || 0;
                 } else if (item.name === 'allow_nesting' || item.name === 'memory_swap' || item.name === 'privileged') {
                     data[item.name] = true; 

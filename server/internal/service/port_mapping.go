@@ -8,9 +8,29 @@ import (
 	"lxdapi/internal/ipv4"
 	"lxdapi/internal/ipv6"
 	"lxdapi/internal/lxc"
+	"lxdapi/internal/node"
 	"lxdapi/models"
 	"lxdapi/pkg/logger"
 )
+
+// execAllocateOnNode 把端口映射的实际执行（nft 规则）下发到容器所属节点：
+// 主控只留记录，规则必须落在容器真正运行的那台机器上。
+func execAllocateOnNode(ctx context.Context, nodeID uint, version string, containerName, iface, forwardIP string, publicPort, publicPortEnd, containerPort, containerPortEnd int, protocol, description string) error {
+	payload := map[string]interface{}{
+		"container_name": containerName, "interface": iface, "public_ip": forwardIP,
+		"public_port": publicPort, "public_port_end": publicPortEnd,
+		"container_port": containerPort, "container_port_end": containerPortEnd,
+		"protocol": protocol, "description": description,
+	}
+	return node.ClientForNode(nodeID).RemoteDoJSON(ctx, "POST", "/api/system/port-mapping/allocate?version="+version, payload, nil)
+}
+
+func execReleaseOnNode(ctx context.Context, nodeID uint, version string, containerName string, publicPort int, protocol string) error {
+	payload := map[string]interface{}{
+		"container_name": containerName, "public_port": publicPort, "protocol": protocol,
+	}
+	return node.ClientForNode(nodeID).RemoteDoJSON(ctx, "POST", "/api/system/port-mapping/release?version="+version, payload, nil)
+}
 
 type PortMappingService struct {
 	lxcClient *lxc.Client
@@ -224,8 +244,13 @@ func (s *PortMappingService) AllocateV4Mapping(ctx context.Context, containerNam
 	if err := db.DB.Create(mapping).Error; err != nil {
 		return nil, fmt.Errorf("保存端口映射失败: %v", err)
 	}
-	
-	if ipv4.GlobalManager != nil {
+
+	if node.IsRemoteNode(container.NodeID) {
+		if err := execAllocateOnNode(ctx, container.NodeID, "v4", containerName, iface, forwardIP, publicPort, publicPortEnd, containerPort, containerPortEnd, protocol, description); err != nil {
+			db.DB.Unscoped().Delete(mapping)
+			return nil, fmt.Errorf("节点执行端口映射失败: %v", err)
+		}
+	} else if ipv4.GlobalManager != nil {
 		if err := ipv4.GlobalManager.AddPortMapping(forwardIP, publicPort, publicPortEnd, containerIP, containerPort, containerPortEnd, protocol, iface); err != nil {
 			db.DB.Unscoped().Delete(mapping)
 			return nil, fmt.Errorf("添加nftables规则失败: %v", err)
@@ -278,8 +303,13 @@ func (s *PortMappingService) AllocateV6Mapping(ctx context.Context, containerNam
 	if err := db.DB.Create(mapping).Error; err != nil {
 		return nil, fmt.Errorf("保存IPv6端口映射失败: %v", err)
 	}
-	
-	if ipv6.GlobalManager != nil {
+
+	if node.IsRemoteNode(container.NodeID) {
+		if err := execAllocateOnNode(ctx, container.NodeID, "v6", containerName, iface, forwardIP, publicPort, publicPortEnd, containerPort, containerPortEnd, protocol, description); err != nil {
+			db.DB.Unscoped().Delete(mapping)
+			return nil, fmt.Errorf("节点执行端口映射失败: %v", err)
+		}
+	} else if ipv6.GlobalManager != nil {
 		if err := ipv6.GlobalManager.AddPortMapping(forwardIP, publicPort, publicPortEnd, containerIP, containerPort, containerPortEnd, protocol, iface); err != nil {
 			db.DB.Unscoped().Delete(mapping)
 			return nil, fmt.Errorf("添加nftables规则失败: %v", err)
@@ -295,7 +325,18 @@ func (s *PortMappingService) ReleaseV4Mapping(id uint) error {
 	if err := db.DB.First(&mapping, id).Error; err != nil {
 		return fmt.Errorf("端口映射不存在: %v", err)
 	}
-	
+
+	if nodeID := node.ResolveNodeIDForContainer(mapping.ContainerName); node.IsRemoteNode(nodeID) {
+		if err := execReleaseOnNode(context.Background(), nodeID, "v4", mapping.ContainerName, mapping.PublicPort, mapping.Protocol); err != nil {
+			return fmt.Errorf("节点释放端口映射失败: %v", err)
+		}
+		if err := db.DB.Unscoped().Delete(&mapping).Error; err != nil {
+			return fmt.Errorf("删除端口映射记录失败: %v", err)
+		}
+		logger.OK("IPv4端口映射释放成功(节点下发): %s:%d -> %s:%d", mapping.PublicIP, mapping.PublicPort, mapping.ContainerIP, mapping.ContainerPort)
+		return nil
+	}
+
 	if ipv4.GlobalManager != nil {
 		forwardIP := mapping.ForwardIP
 		if forwardIP == "" {
@@ -327,7 +368,18 @@ func (s *PortMappingService) ReleaseV6Mapping(id uint) error {
 	if err := db.DB.First(&mapping, id).Error; err != nil {
 		return fmt.Errorf("端口映射不存在: %v", err)
 	}
-	
+
+	if nodeID := node.ResolveNodeIDForContainer(mapping.ContainerName); node.IsRemoteNode(nodeID) {
+		if err := execReleaseOnNode(context.Background(), nodeID, "v6", mapping.ContainerName, mapping.PublicPort, mapping.Protocol); err != nil {
+			return fmt.Errorf("节点释放端口映射失败: %v", err)
+		}
+		if err := db.DB.Unscoped().Delete(&mapping).Error; err != nil {
+			return fmt.Errorf("删除IPv6端口映射记录失败: %v", err)
+		}
+		logger.OK("IPv6端口映射释放成功(节点下发): %s:%d -> %s:%d", mapping.PublicIP, mapping.PublicPort, mapping.ContainerIP, mapping.ContainerPort)
+		return nil
+	}
+
 	if ipv6.GlobalManager != nil {
 		forwardIP := mapping.ForwardIP
 		if forwardIP == "" {

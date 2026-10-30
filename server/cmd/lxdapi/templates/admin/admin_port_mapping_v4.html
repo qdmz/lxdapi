@@ -521,7 +521,7 @@
 
             async function saveIPPoolSettings() {
                 try {
-                    const response = await fetch('/api/admin/nat-config?version=v4', {
+                    const response = await fetch('/api/admin/nat-config?version=v4&node_id=' + (document.getElementById('nodeSelector')?.value || ''), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(ipPoolData)
@@ -611,7 +611,7 @@
 
             async function loadNATSwitchSettings() {
                 try {
-                    const response = await fetch('/api/admin/network/nat');
+                    const response = await fetch('/api/admin/network/nat?node_id=' + (document.getElementById('nodeSelector')?.value || ''));
                     const result = await response.json();
                     if (result.code === 200 && result.data) {
                         document.getElementById('ipv4NatSwitch').checked = result.data.ipv4_nat || false;
@@ -624,7 +624,7 @@
 
             async function saveNATSwitchSettings() {
                 try {
-                    const response = await fetch('/api/admin/network/nat', {
+                    const response = await fetch('/api/admin/network/nat?node_id=' + (document.getElementById('nodeSelector')?.value || ''), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({

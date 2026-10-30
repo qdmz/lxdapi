@@ -5,7 +5,6 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -19,11 +18,11 @@ import (
 	"lxdapi/internal/api/admin"
 	"lxdapi/internal/api/console"
 	"lxdapi/internal/api/container"
+	"lxdapi/internal/api/notification"
+	"lxdapi/internal/api/payment"
 	"lxdapi/internal/api/public"
 	"lxdapi/internal/api/system"
 	"lxdapi/internal/api/user"
-	"lxdapi/internal/api/payment"
-	"lxdapi/internal/api/notification"
 	"lxdapi/internal/core"
 	"lxdapi/internal/db"
 	"lxdapi/internal/executor"
@@ -38,21 +37,22 @@ import (
 	"lxdapi/pkg/logger"
 	"lxdapi/pkg/plugin"
 	"lxdapi/pkg/response"
-	"lxdapi/pkg/utils"
 	sysinfo "lxdapi/pkg/system"
 	tlsManager "lxdapi/pkg/tls"
+	"lxdapi/pkg/utils"
 	"lxdapi/plugins/nginx"
 	"lxdapi/plugins/opengfw"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 //go:embed templates docs static
 var embeddedFiles embed.FS
 
 // Version 版本号
-var Version = "0.05"
+var Version = "0.06"
 
 func main() {
 	if err := core.LoadConfig("configs/config.yaml"); err != nil {
@@ -78,11 +78,11 @@ func main() {
 	db.DB.Model(&models.Node{}).Count(&nodeCount)
 	if nodeCount == 0 {
 		localNode := models.Node{
-			Name:        "本机",
-			Host:        "",
-			APIPort:     0,
-			Status:      "online",
-			Remark:      "自动注册的本机 LXD 节点",
+			Name:    "本机",
+			Host:    "",
+			APIPort: 0,
+			Status:  "online",
+			Remark:  "自动注册的本机 LXD 节点",
 		}
 		if err := db.DB.Create(&localNode).Error; err != nil {
 			logger.Error("自动注册本机节点失败: %v", err)
@@ -363,11 +363,11 @@ func main() {
 			}
 		}
 		data := utils.MergeTemplateData(c, gin.H{
-			"title":          siteName + " - LXD 容器云平台",
-			"SiteName":       siteName,
+			"title":           siteName + " - LXD 容器云平台",
+			"SiteName":        siteName,
 			"RegisterEnabled": settings.RegisterEnabled(),
-			"Version":        "v2.1.3",
-			"SysInfo":        sysInfo,
+			"Version":         "v2.1.3",
+			"SysInfo":         sysInfo,
 		})
 		c.HTML(http.StatusOK, "public/home.html", data)
 	})
@@ -514,6 +514,26 @@ func main() {
 		systemAPI.POST("/console/create-token", console.CreateToken)
 		systemAPI.GET("/admin/access-token", system.GetAdminAccessToken)
 		systemAPI.GET("/users/:username/access-token", system.GetUserAccessToken)
+		// 镜像与存储池（主控远程节点的镜像/存储操作经此下发到节点本机）
+		systemAPI.GET("/images", system.ListImages)
+		systemAPI.GET("/images/:fingerprint", system.GetImage)
+		systemAPI.DELETE("/images/:fingerprint", system.DeleteImage)
+		systemAPI.POST("/images/copy", system.CopyImage)
+		systemAPI.POST("/images/import", system.ImportImage)
+		systemAPI.POST("/images/publish", system.PublishImage)
+		systemAPI.POST("/images/alias", system.CreateImageAlias)
+		systemAPI.POST("/images/alias/delete", system.DeleteImageAlias)
+		systemAPI.GET("/storage-pools", system.ListStoragePools)
+		systemAPI.GET("/remote-images", system.ListRemoteImages)
+		// 功能下发：DNS / 网络 NAT / 公网 IP 池（主控按节点归属下发，节点在本机执行）
+		systemAPI.GET("/containers/:name/dns", system.GetContainerDNS)
+		systemAPI.POST("/containers/:name/dns", system.SetContainerDNS)
+		systemAPI.POST("/containers/:name/exec", system.ExecInContainer)
+		systemAPI.GET("/network/nat", system.GetNetworkNAT)
+		systemAPI.POST("/network/nat", system.SetNetworkNAT)
+		systemAPI.POST("/network/fix-egress", system.FixEgress)
+		systemAPI.POST("/ip-pool/allocate", system.AllocateIPPool)
+		systemAPI.POST("/ip-pool/release", system.ReleaseIPPool)
 	}
 
 	r.GET("/api/port-range/config", admin.GetPortRangeConfig)
@@ -588,6 +608,8 @@ func main() {
 		adminAPI.PUT("/knowledge/:id", admin.UpdateKnowledgeArticle)
 		adminAPI.DELETE("/knowledge/:id", admin.DeleteKnowledgeArticle)
 		adminAPI.POST("/templates/sync", admin.SyncTemplates)
+		adminAPI.GET("/remote-images", admin.GetRemoteImages)
+		adminAPI.POST("/templates/download", admin.DownloadRemoteImage)
 		adminAPI.DELETE("/templates/:fingerprint", admin.DeleteTemplate)
 		adminAPI.POST("/templates/batch-delete", admin.BatchDeleteTemplates)
 		adminAPI.GET("/templates/:fingerprint/permission", admin.GetTemplatePermission)
@@ -631,12 +653,19 @@ func main() {
 		adminAPI.DELETE("/nodes/:id", admin.DeleteNode)
 		adminAPI.POST("/nodes/:id/test", admin.TestNode)
 		adminAPI.GET("/nodes/:id/images", admin.GetNodeImages)
+		adminAPI.DELETE("/nodes/:id/images/:fingerprint", admin.DeleteNodeImage)
+		adminAPI.POST("/nodes/:id/images/copy", admin.CopyNodeImage)
+		adminAPI.POST("/nodes/:id/images/import", admin.ImportNodeImage)
+		adminAPI.POST("/nodes/:id/images/publish", admin.PublishNodeImage)
+		adminAPI.POST("/nodes/:id/images/alias", admin.CreateNodeImageAlias)
+		adminAPI.POST("/nodes/:id/images/alias/delete", admin.DeleteNodeImageAlias)
 		// 优惠券管理
 		adminAPI.GET("/coupons", admin.ListCoupons)
 		adminAPI.POST("/coupons", admin.CreateCoupon)
 		adminAPI.PUT("/coupons/:id", admin.UpdateCoupon)
 		adminAPI.DELETE("/coupons/:id", admin.DeleteCoupon)
 		adminAPI.GET("/coupons/:id/stats", admin.CouponStats)
+		adminAPI.GET("/coupons/:id/records", admin.CouponRecords)
 		adminAPI.GET("/regions", admin.ListRegions)
 		adminAPI.POST("/regions", admin.CreateRegion)
 		adminAPI.PUT("/regions/:id", admin.UpdateRegion)

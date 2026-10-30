@@ -55,7 +55,7 @@ func (m *Manager) RemovePortMapping(publicIP string, publicPort, publicPortEnd i
 	return m.removePortDNAT(publicIP, publicPort, publicPortEnd, containerIP, containerPort, containerPortEnd, protocol, iface)
 }
 
-func (m *Manager) AllocateIPs(containerName, userID string, count int) ([]string, error) {
+func (m *Manager) AllocateIPs(containerName, userID string, count int, nodeID uint) ([]string, error) {
 	if count == 0 {
 		logger.Info("容器 %s 不需要分配IPv4", containerName)
 		return nil, nil
@@ -68,7 +68,13 @@ func (m *Manager) AllocateIPs(containerName, userID string, count int) ([]string
 	db.DB.First(&settings)
 	
 	var availablePools []models.IPv4Pool
-	query := db.DB.Where("status = ?", "available")
+	// 只从本节点（或未标注节点）的池里选：主控库里可能登记着远程节点的池行，
+	// 在本机执行分配时误选会把别节点的 IP 绑到本机 nft 上。
+	effNode := nodeID
+	if effNode == 0 {
+		effNode = 1
+	}
+	query := db.DB.Where("status = ? AND (node_id = 0 OR node_id = ?)", "available", effNode)
 	if settings.RandomAssign {
 		query = query.Order("RANDOM()")
 	}

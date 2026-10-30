@@ -4,8 +4,8 @@ import "gorm.io/gorm"
 
 type Template struct {
 	gorm.Model
-	NodeID       uint   `gorm:"index" json:"node_id"` // 所属节点，0=全局/未分配
-	Fingerprint  string `gorm:"uniqueIndex;size:255"`
+	NodeID       uint   `gorm:"index;uniqueIndex:idx_template_node_fp" json:"node_id"` // 所属节点，0=全局/未分配
+	Fingerprint  string `gorm:"uniqueIndex:idx_template_node_fp;size:255"`
 	Alias        string `gorm:"index;size:255"`
 	Architecture string `gorm:"size:50"`
 	Description  string `gorm:"size:500"`

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"lxdapi/internal/db"
-	"lxdapi/internal/lxc"
+	"lxdapi/internal/node"
 	"lxdapi/models"
 	"lxdapi/pkg/logger"
 )
@@ -35,15 +35,36 @@ type ContainerCacheJSON struct {
 	CreatedAt       string                 `json:"created_at"`
 	LastSync        string                 `json:"last_sync"`
 	Remark          string                 `json:"remark"`
+	NodeID          uint                   `json:"node_id"`
+	NodeName        string                 `json:"node_name"`
 }
 
 func GetAllContainersCache() []ContainerCacheJSON {
 	var containers []models.Container
 	db.DB.Find(&containers)
 
+	// 节点名映射：容器列表/卡片要显示所属节点（node_id=0 按本机节点 1 处理）
+	nodeNames := map[uint]string{}
+	var nodes []models.Node
+	if err := db.DB.Find(&nodes).Error; err == nil {
+		for _, n := range nodes {
+			nodeNames[n.ID] = n.Name
+		}
+	}
+
 	result := make([]ContainerCacheJSON, 0, len(containers))
 	for _, c := range containers {
+		effNodeID := c.NodeID
+		if effNodeID == 0 {
+			effNodeID = 1
+		}
+		nodeName := nodeNames[effNodeID]
+		if nodeName == "" {
+			nodeName = "本机"
+		}
 		cacheData := ContainerCacheJSON{
+			NodeID:          c.NodeID,
+			NodeName:        nodeName,
 			Name:            c.Name,
 			Status:          c.Status,
 			Image:           c.Image,
@@ -122,11 +143,15 @@ func DeleteContainerCache(name string) {
 }
 
 func RefreshAllContainersCache(ctx context.Context) (int, int, error) {
-	lxcClient := lxc.NewClient()
-	
-	containerNames, err := lxcClient.ListAllContainers(ctx)
-	if err != nil {
+	// 容器清单以主控数据库为准（含各远程节点的容器），逐个按归属节点刷新；
+	// 此前只列本机 LXD，远程容器永远刷不到。
+	var dbContainers []models.Container
+	if err := db.DB.Find(&dbContainers).Error; err != nil {
 		return 0, 0, fmt.Errorf("获取容器列表失败: %v", err)
+	}
+	containerNames := make([]string, 0, len(dbContainers))
+	for _, c := range dbContainers {
+		containerNames = append(containerNames, c.Name)
 	}
 
 	total := len(containerNames)
@@ -146,16 +171,16 @@ func RefreshAllContainersCache(ctx context.Context) (int, int, error) {
 }
 
 func RefreshContainerCache(ctx context.Context, name string) error {
-	lxcClient := lxc.NewClient()
-
-	info, err := lxcClient.GetContainerInfo(ctx, name)
-	if err != nil {
-		return err
-	}
-
+	// 先查归属节点，再用该节点的客户端取信息（此前写死本机 client，远程容器刷新必失败）
 	var container models.Container
 	if err := db.DB.Where("name = ?", name).First(&container).Error; err != nil {
 		return fmt.Errorf("容器不存在于数据库: %s", name)
+	}
+
+	lxcClient := node.ClientForNode(container.NodeID)
+	info, err := lxcClient.GetContainerInfo(ctx, name)
+	if err != nil {
+		return err
 	}
 
 	container.Status = strings.ToLower(info.Status)
@@ -196,7 +221,7 @@ func RefreshContainerCache(ctx context.Context, name string) error {
 	ipv6List := make([]string, 0)
 
 	if info.State != nil && info.Status == "Running" {
-		cpuUsage := getContainerCPUUsagePercent(ctx, name)
+		cpuUsage := getContainerCPUUsagePercent(ctx, name, container.NodeID)
 		container.CPUUsage = cpuUsage
 
 		if memUsage, ok := info.State.Memory["usage"].(float64); ok {
@@ -262,22 +287,23 @@ func parseCPULimit(limit string) int {
 	return cpus
 }
 
-func getContainerCPUUsagePercent(ctx context.Context, containerName string) float64 {
-	lxcClient := lxc.NewClient()
-	
+func getContainerCPUUsagePercent(ctx context.Context, containerName string, nodeID uint) float64 {
+	// 按容器归属节点取客户端；远程节点暂不支持 exec，调用会失败并返回 0（不再误查本机同名容器）
+	lxcClient := node.ClientForNode(nodeID)
+
 	output, err := lxcClient.ExecInContainer(ctx, containerName, []string{"sh", "-c", "vmstat 1 2 | tail -1 | awk '{print $15}'"})
 	if err != nil {
 		logger.Warn("获取容器 %s CPU使用率失败: %v", containerName, err)
 		return 0
 	}
-	
+
 	idleStr := strings.TrimSpace(output)
 	idlePercent, err := strconv.ParseFloat(idleStr, 64)
 	if err != nil {
 		logger.Warn("解析容器 %s CPU idle值失败: %v, 输出: %s", containerName, err, idleStr)
 		return 0
 	}
-	
+
 	cpuUsage := 100 - idlePercent
 	if cpuUsage < 0 {
 		cpuUsage = 0
@@ -285,7 +311,7 @@ func getContainerCPUUsagePercent(ctx context.Context, containerName string) floa
 	if cpuUsage > 100 {
 		cpuUsage = 100
 	}
-	
+
 	return cpuUsage
 }
 

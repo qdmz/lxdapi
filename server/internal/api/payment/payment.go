@@ -130,7 +130,9 @@ func CreateOrder(c *gin.Context) {
 	var userCouponID uint
 	if req.CouponCode != "" {
 		var uc models.UserCoupon
-		if err := db.DB.Preload("Coupon").Where("user_id = ? AND status = 'unused'", user.ID).
+		// 注意：JOIN 后两表都有 status 列，条件必须带表名限定，
+		// 否则数据库报 ambiguous column，任何优惠券都会被误判为「无效或已使用」。
+		if err := db.DB.Preload("Coupon").Where("user_coupons.user_id = ? AND user_coupons.status = 'unused'", user.ID).
 			Joins("JOIN coupons ON coupons.id = user_coupons.coupon_id").
 			Where("coupons.code = ?", req.CouponCode).First(&uc).Error; err != nil {
 			response.Error(c, 400, "优惠券无效或已使用")

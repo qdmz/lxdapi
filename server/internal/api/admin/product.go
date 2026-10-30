@@ -2,6 +2,7 @@ package admin
 
 import (
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"lxdapi/internal/db"
 	"lxdapi/models"
 	"lxdapi/pkg/response"
@@ -94,6 +95,10 @@ func UpdateProduct(c *gin.Context) {
 // DeleteProduct 删除产品
 func DeleteProduct(c *gin.Context) {
 	id := c.Param("id")
+	// 产品名带唯一索引，而软删除保留行会一直占用原名，导致同名产品删后无法重建。
+	// 删除前先把名称改成内部删除标记名，释放原名给后续新建。
+	db.DB.Model(&models.Product{}).Where("id = ?", id).
+		Update("name", gorm.Expr("name || '#deleted-' || id"))
 	if err := db.DB.Delete(&models.Product{}, id).Error; err != nil {
 		response.Error(c, 500, "删除产品失败")
 		return

@@ -28,7 +28,7 @@ func adminShQuote(s string) string {
 
 func adminExecIn(c *gin.Context, name string, args ...string) (string, error) {
 	svc := service.NewContainerService()
-	return svc.GetLXCClient().ExecInContainer(c.Request.Context(), name, args)
+	return svc.ClientForContainer(name).ExecInContainer(c.Request.Context(), name, args)
 }
 
 // ArchiveFile 打包下载目录或文件（tar.gz）

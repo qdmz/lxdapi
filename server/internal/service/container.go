@@ -35,39 +35,47 @@ func (s *ContainerService) GetLXCClient() *lxc.Client {
 	return s.lxcClient
 }
 
+// ClientForContainer 按容器归属节点路由后返回客户端。
+// 文件管理等绕过 service 方法、直接拿 client 的场景必须走这里，
+// 否则远程容器的操作会落到主控本机（同名容器还会串扰）。
+func (s *ContainerService) ClientForContainer(name string) *lxc.Client {
+	s.routeClientForContainer(name)
+	return s.lxcClient
+}
+
 func generatePassword() string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
 	const length = 16
-	
+
 	password := make([]byte, length)
-	
+
 	upper := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	lower := "abcdefghijklmnopqrstuvwxyz"
 	digits := "0123456789"
 	special := "!@#$%^&*"
-	
+
 	n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(upper))))
 	password[0] = upper[n.Int64()]
-	
+
 	n, _ = rand.Int(rand.Reader, big.NewInt(int64(len(lower))))
 	password[1] = lower[n.Int64()]
-	
+
 	n, _ = rand.Int(rand.Reader, big.NewInt(int64(len(digits))))
 	password[2] = digits[n.Int64()]
-	
+
 	n, _ = rand.Int(rand.Reader, big.NewInt(int64(len(special))))
 	password[3] = special[n.Int64()]
-	
+
 	for i := 4; i < length; i++ {
 		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
 		password[i] = charset[n.Int64()]
 	}
-	
+
 	for i := length - 1; i > 0; i-- {
 		j, _ := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
 		password[i], password[j.Int64()] = password[j.Int64()], password[i]
 	}
-	
+
 	return string(password)
 }
 
@@ -84,7 +92,7 @@ func (s *ContainerService) Create(ctx context.Context, req *models.CreateContain
 			req.Password = generatePassword()
 		}
 		client.SetRemoteCreate(&lxc.RemoteCreateParams{
-			Name: req.Name, Password: req./**/Password, Image: req.Image,
+			Name: req.Name, Password: req. /**/ Password, Image: req.Image,
 			CPU: req.CPU, Memory: req.Memory, Disk: req.Disk,
 			Ingress: req.Ingress, Egress: req.Egress, TrafficLimit: req.TrafficLimit,
 			AllowNesting: req.AllowNesting, MemorySwap: req.MemorySwap, Privileged: req.Privileged,
@@ -100,20 +108,20 @@ func (s *ContainerService) Create(ctx context.Context, req *models.CreateContain
 	if s.lxcClient.ContainerExists(ctx, req.Name) {
 		return fmt.Errorf("容器已存在: %s", req.Name)
 	}
-	
+
 	user, err := GetOrCreateUser(req.Username)
 	if err != nil {
 		return fmt.Errorf("处理用户失败: %v", err)
 	}
-	
+
 	if user.TrafficLocked {
 		return fmt.Errorf("用户流量已超限，无法创建容器")
 	}
-	
+
 	logger.Info("用户确认: %s (ID: %d)", user.Username, user.ID)
-	
+
 	logger.Info("开始创建容器: %s, 镜像: %s", req.Name, req.Image)
-	
+
 	memory := ""
 	if req.Memory > 0 {
 		memory = fmt.Sprintf("%dMB", req.Memory)
@@ -142,19 +150,19 @@ func (s *ContainerService) Create(ctx context.Context, req *models.CreateContain
 	if req.IOWrite > 0 {
 		ioWrite = fmt.Sprintf("%dMB", req.IOWrite)
 	}
-	
-	storagePool := NewStorageService().GetDefault()
+
+	storagePool := NewStorageService().GetDefaultForNode(req.NodeID)
 	logger.Info("使用存储池: %s", storagePool)
-	
+
 	if err := s.lxcClient.CreateContainerWithConfig(ctx, req.Name, req.Image, storagePool, req.CPU, memory, disk, ingress, egress, req.AllowNesting, req.MemorySwap, req.Privileged, "", cpuAllowance, ioRead, ioWrite, req.ProcessesLimit); err != nil {
 		return fmt.Errorf("创建容器失败: %v", err)
 	}
-	
+
 	// 启动失败若因宿主机不支持网卡限速参数，自动去限速后重试（容错，不影响开通）
 	if err := s.lxcClient.StartContainerWithLimitFallback(ctx, req.Name); err != nil {
 		logger.Warn("启动容器失败: %v", err)
 	}
-	
+
 	imageAlias := req.Image
 	if info, err := s.lxcClient.GetContainerInfo(ctx, req.Name); err == nil {
 		if imageDesc, ok := info.Config["image.description"].(string); ok && imageDesc != "" {
@@ -162,7 +170,7 @@ func (s *ContainerService) Create(ctx context.Context, req *models.CreateContain
 			logger.Info("从LXD获取镜像别名: %s", imageAlias)
 		}
 	}
-	
+
 	if _, err := s.lxcClient.ExecInContainer(ctx, req.Name, []string{"hostnamectl", "set-hostname", req.Name}); err != nil {
 		logger.Warn("使用hostnamectl设置主机名失败，尝试直接修改文件: %v", err)
 		setHostnameCmd := fmt.Sprintf("echo '%s' > /etc/hostname && hostname %s", req.Name, req.Name)
@@ -174,19 +182,19 @@ func (s *ContainerService) Create(ctx context.Context, req *models.CreateContain
 	} else {
 		logger.Info("主机名已设置: %s", req.Name)
 	}
-	
+
 	actualPassword := req.Password
 	if actualPassword == "" {
 		actualPassword = generatePassword()
 		logger.Info("未指定密码，已自动生成密码")
 	}
-	
+
 	if err := s.lxcClient.SetRootPassword(ctx, req.Name, actualPassword); err != nil {
 		logger.Warn("设置root密码失败: %v", err)
 	} else {
 		logger.Info("root密码已设置")
 	}
-	
+
 	macAddress, err := s.lxcClient.GetContainerMAC(ctx, req.Name)
 	if err != nil {
 		logger.Warn("获取容器MAC地址失败: %v", err)
@@ -194,68 +202,68 @@ func (s *ContainerService) Create(ctx context.Context, req *models.CreateContain
 	} else {
 		logger.Info("容器MAC地址: %s", macAddress)
 	}
-	
+
 	time.Sleep(3 * time.Second)
-	
+
 	privateIP := s.getContainerIP(ctx, req.Name)
 	privateIPv6 := s.getContainerIPv6(ctx, req.Name)
-	
+
 	if privateIP != "" {
 		logger.Info("容器内网IPv4: %s", privateIP)
 	} else {
 		logger.Warn("首次未获取到容器内网IPv4，将在后台任务中重试")
 	}
-	
+
 	if privateIPv6 != "" {
 		logger.Info("容器内网IPv6: %s", privateIPv6)
 	} else {
 		logger.Warn("首次未获取到容器内网IPv6，将在后台任务中重试")
 	}
-	
+
 	container := &models.Container{
-		Name:         req.Name,
-		UserID:       req.Username,
-		NodeID:       req.NodeID,
-		Image:        imageAlias,
-		Password:     actualPassword,
-		Status:       "stopped",
-		CPU:          req.CPU,
-		Memory:       req.Memory,
-		Disk:         req.Disk,
-		Ingress:          req.Ingress,
-		Egress:           req.Egress,
-		TrafficLimit:     req.TrafficLimit,
-		IPv4PoolLimit:    req.IPv4PoolLimit,
-		IPv4MappingLimit: req.IPv4MappingLimit,
-		IPv6PoolLimit:    req.IPv6PoolLimit,
-		IPv6MappingLimit: req.IPv6MappingLimit,
+		Name:              req.Name,
+		UserID:            req.Username,
+		NodeID:            req.NodeID,
+		Image:             imageAlias,
+		Password:          actualPassword,
+		Status:            "stopped",
+		CPU:               req.CPU,
+		Memory:            req.Memory,
+		Disk:              req.Disk,
+		Ingress:           req.Ingress,
+		Egress:            req.Egress,
+		TrafficLimit:      req.TrafficLimit,
+		IPv4PoolLimit:     req.IPv4PoolLimit,
+		IPv4MappingLimit:  req.IPv4MappingLimit,
+		IPv6PoolLimit:     req.IPv6PoolLimit,
+		IPv6MappingLimit:  req.IPv6MappingLimit,
 		ReverseProxyLimit: req.ReverseProxyLimit,
-		CPUAllowance:     req.CPUAllowance,
-		IORead:           req.IORead,
-		IOWrite:          req.IOWrite,
-		ProcessesLimit:   req.ProcessesLimit,
-		PrivateIP:        privateIP,
-		PrivateIPv6:  privateIPv6,
-		MacAddress:   macAddress,
-		AllowNesting: req.AllowNesting,
-		MemorySwap:   req.MemorySwap,
-		Privileged:   req.Privileged,
-		Remark:       req.Remark,
+		CPUAllowance:      req.CPUAllowance,
+		IORead:            req.IORead,
+		IOWrite:           req.IOWrite,
+		ProcessesLimit:    req.ProcessesLimit,
+		PrivateIP:         privateIP,
+		PrivateIPv6:       privateIPv6,
+		MacAddress:        macAddress,
+		AllowNesting:      req.AllowNesting,
+		MemorySwap:        req.MemorySwap,
+		Privileged:        req.Privileged,
+		Remark:            req.Remark,
 	}
-	
+
 	if err := db.DB.Create(container).Error; err != nil {
 		logger.Error("保存容器记录失败: %v", err)
 		s.lxcClient.DeleteContainer(ctx, req.Name)
 		return fmt.Errorf("保存容器记录失败: %v", err)
 	}
-	
+
 	needRetryIPv4 := privateIP == ""
 	needRetryIPv6 := privateIPv6 == ""
 	if needRetryIPv4 || needRetryIPv6 {
 		logger.Info("启动后台任务获取容器IP (IPv4: %v, IPv6: %v)", needRetryIPv4, needRetryIPv6)
 		go s.retryGetContainerIPs(req.Name, needRetryIPv4, needRetryIPv6, "", "")
 	}
-	
+
 	if req.TrafficLimit > 0 {
 		traffic := &models.Traffic{
 			ContainerName: req.Name,
@@ -265,17 +273,29 @@ func (s *ContainerService) Create(ctx context.Context, req *models.CreateContain
 			logger.Warn("创建流量记录失败: %v", err)
 		}
 	}
-	
+
 	if _, err := CreateContainerCredential(req.Name); err != nil {
 		logger.Warn("创建容器访问码失败: %v", err)
 	} else {
 		logger.OK("容器访问码已生成: %s", req.Name)
 	}
-	
+
 	logger.OK("容器创建完成: %s (IPv4: %s, IPv6: %s)", req.Name,
-		func() string { if privateIP != "" { return privateIP } else { return "等待获取" } }(),
-		func() string { if privateIPv6 != "" { return privateIPv6 } else { return "等待获取" } }())
-	
+		func() string {
+			if privateIP != "" {
+				return privateIP
+			} else {
+				return "等待获取"
+			}
+		}(),
+		func() string {
+			if privateIPv6 != "" {
+				return privateIPv6
+			} else {
+				return "等待获取"
+			}
+		}())
+
 	var ipSettings models.IPPoolSettings
 	db.DB.First(&ipSettings)
 	if ipSettings.AutoAssign {
@@ -296,22 +316,22 @@ func (s *ContainerService) Create(ctx context.Context, req *models.CreateContain
 			}
 		}
 	}
-	
+
 	var portRangeConfig models.PortRangeConfig
 	db.DB.First(&portRangeConfig)
-	
+
 	if portRangeConfig.V4AutoAllocate22 && container.IPv4MappingLimit >= 1 && privateIP != "" {
 		if err := s.autoAllocateSSHPortV4(ctx, req.Name, req.Username, privateIP, portRangeConfig); err != nil {
 			logger.Warn("自动分配IPv4 SSH端口失败: %v", err)
 		}
 	}
-	
+
 	if portRangeConfig.V6AutoAllocate22 && container.IPv6MappingLimit >= 1 && privateIPv6 != "" {
 		if err := s.autoAllocateSSHPortV6(ctx, req.Name, req.Username, privateIPv6, portRangeConfig); err != nil {
 			logger.Warn("自动分配IPv6 SSH端口失败: %v", err)
 		}
 	}
-	
+
 	if mgr := plugin.GetManager(); mgr != nil {
 		mgr.GetHookManager().TriggerAsync(plugin.HookAfterContainerCreate, ctx, map[string]interface{}{
 			"name":     req.Name,
@@ -319,14 +339,22 @@ func (s *ContainerService) Create(ctx context.Context, req *models.CreateContain
 			"image":    req.Image,
 		})
 	}
-	
+
 	cache.RefreshContainerCache(ctx, req.Name)
-	
+
 	return nil
 }
 
 // routeClientForContainer 按容器归属节点切换客户端：
 // 先看主控容器记录的 node_id，缺失时按订单归属兜底（0/本机则本地客户端）。
+// effNode 把容器记录里的 node_id 归一化：0 视为本机节点 1。
+func effNode(nodeID uint) uint {
+	if nodeID == 0 {
+		return 1
+	}
+	return nodeID
+}
+
 func (s *ContainerService) routeClientForContainer(name string) {
 	nodeID := uint(0)
 	var ct models.Container
@@ -455,7 +483,7 @@ func (s *ContainerService) Reinstall(ctx context.Context, name, image, password 
 		if container.IOWrite > 0 {
 			ioWrite = fmt.Sprintf("%dMB", container.IOWrite)
 		}
-		storagePool := NewStorageService().GetDefault()
+		storagePool := NewStorageService().GetDefaultForNode(container.NodeID)
 		if err := s.lxcClient.CreateContainerWithConfig(ctx, name, image, storagePool,
 			container.CPU, memory, disk, ingress, egress,
 			container.AllowNesting, container.MemorySwap, container.Privileged,
@@ -497,7 +525,7 @@ func (s *ContainerService) Reinstall(ctx context.Context, name, image, password 
 	if finalPassword == "" {
 		finalPassword = container.Password
 	}
-	
+
 	if finalPassword != "" {
 		if err := s.lxcClient.SetRootPassword(ctx, name, finalPassword); err != nil {
 			logger.Warn("设置root密码失败: %v", err)
@@ -513,12 +541,12 @@ func (s *ContainerService) Reinstall(ctx context.Context, name, image, password 
 
 	actualPrivateIP := s.getContainerIP(ctx, name)
 	actualPrivateIPv6 := s.getContainerIPv6(ctx, name)
-	
+
 	updateFields := map[string]interface{}{
 		"image":  imageAlias,
 		"status": "running",
 	}
-	
+
 	if actualPrivateIP != "" {
 		if actualPrivateIP != container.PrivateIP {
 			logger.Warn("容器重装后内网IPv4发生变化: %s -> %s", container.PrivateIP, actualPrivateIP)
@@ -528,7 +556,7 @@ func (s *ContainerService) Reinstall(ctx context.Context, name, image, password 
 			logger.OK("容器内网IPv4保持不变: %s", actualPrivateIP)
 		}
 	}
-	
+
 	if actualPrivateIPv6 != "" {
 		if actualPrivateIPv6 != container.PrivateIPv6 {
 			logger.Warn("容器重装后内网IPv6发生变化: %s -> %s", container.PrivateIPv6, actualPrivateIPv6)
@@ -538,9 +566,9 @@ func (s *ContainerService) Reinstall(ctx context.Context, name, image, password 
 			logger.OK("容器内网IPv6保持不变: %s", actualPrivateIPv6)
 		}
 	}
-	
+
 	db.DB.Model(&models.Container{}).Where("name = ?", name).Updates(updateFields)
-	
+
 	needRetryIPv4 := actualPrivateIP == ""
 	needRetryIPv6 := actualPrivateIPv6 == ""
 	if needRetryIPv4 || needRetryIPv6 {
@@ -548,9 +576,21 @@ func (s *ContainerService) Reinstall(ctx context.Context, name, image, password 
 		go s.retryGetContainerIPs(name, needRetryIPv4, needRetryIPv6, container.PrivateIP, container.PrivateIPv6)
 	}
 
-	logger.OK("容器重装完成: %s (IPv4: %s, IPv6: %s)", name, 
-		func() string { if actualPrivateIP != "" { return actualPrivateIP } else { return "等待获取" } }(),
-		func() string { if actualPrivateIPv6 != "" { return actualPrivateIPv6 } else { return "等待获取" } }())
+	logger.OK("容器重装完成: %s (IPv4: %s, IPv6: %s)", name,
+		func() string {
+			if actualPrivateIP != "" {
+				return actualPrivateIP
+			} else {
+				return "等待获取"
+			}
+		}(),
+		func() string {
+			if actualPrivateIPv6 != "" {
+				return actualPrivateIPv6
+			} else {
+				return "等待获取"
+			}
+		}())
 	return nil
 }
 
@@ -574,7 +614,7 @@ func (s *ContainerService) Delete(ctx context.Context, name string) error {
 			}
 		}
 	}
-	
+
 	var mappingsV6 []models.PortMappingV6
 	if err := db.DB.Where("container_name = ?", name).Find(&mappingsV6).Error; err == nil {
 		pmService := NewPortMappingService()
@@ -584,7 +624,7 @@ func (s *ContainerService) Delete(ctx context.Context, name string) error {
 			}
 		}
 	}
-	
+
 	if ipv4.GlobalManager != nil {
 		if err := ipv4.GlobalManager.ReleaseIPs(name); err != nil {
 			logger.Warn("释放IPv4地址池失败: %v", err)
@@ -592,7 +632,7 @@ func (s *ContainerService) Delete(ctx context.Context, name string) error {
 	} else {
 		db.DB.Unscoped().Where("container_name = ?", name).Delete(&models.IPv4Binding{})
 	}
-	
+
 	if ipv6.GlobalManager != nil {
 		if err := ipv6.GlobalManager.ReleaseIPs(name); err != nil {
 			logger.Warn("释放IPv6地址池失败: %v", err)
@@ -600,28 +640,28 @@ func (s *ContainerService) Delete(ctx context.Context, name string) error {
 	} else {
 		db.DB.Unscoped().Where("container_name = ?", name).Delete(&models.IPv6Binding{})
 	}
-	
+
 	if err := s.lxcClient.DeleteContainer(ctx, name); err != nil {
 		logger.Warn("删除LXD容器失败: %v，继续清理数据库和缓存", err)
 	}
-	
+
 	db.DB.Unscoped().Where("name = ?", name).Delete(&models.Container{})
 	db.DB.Unscoped().Where("container_name = ?", name).Delete(&models.Traffic{})
-	
+
 	if err := DeleteContainerCredential(name); err != nil {
 		logger.Warn("删除容器凭证失败: %v", err)
 	}
-	
+
 	cache.DeleteContainerCache(name)
-	
+
 	logger.OK("容器及相关数据已清理: %s", name)
-	
+
 	if mgr := plugin.GetManager(); mgr != nil {
 		mgr.GetHookManager().TriggerAsync(plugin.HookAfterContainerDelete, ctx, map[string]interface{}{
 			"container_name": name,
 		})
 	}
-	
+
 	return nil
 }
 
@@ -667,13 +707,13 @@ func (s *ContainerService) ResetPassword(ctx context.Context, name, password str
 	if !s.lxcClient.ContainerExists(ctx, name) {
 		return fmt.Errorf("容器不存在: %s", name)
 	}
-	
+
 	if err := s.lxcClient.SetRootPassword(ctx, name, password); err != nil {
 		return fmt.Errorf("设置密码失败: %v", err)
 	}
-	
+
 	db.DB.Model(&models.Container{}).Where("name = ?", name).Update("password", password)
-	
+
 	logger.OK("容器 %s 密码重置成功", name)
 	return nil
 }
@@ -695,19 +735,33 @@ func (s *ContainerService) GetInfo(ctx context.Context, name string) (map[string
 		return nil, fmt.Errorf("容器不存在于数据库: %s", name)
 	}
 
+	// 所属节点信息：容器信息页展示「节点：xxx」，重装选镜像也按此节点取列表。
+	// containers.node_id=0 是早期本机容器的历史值，与节点 1（本机）等价。
+	nodeName := "本机"
+	lookupNodeID := container.NodeID
+	if lookupNodeID == 0 {
+		lookupNodeID = 1
+	}
+	var nodeRow models.Node
+	if err := db.DB.First(&nodeRow, lookupNodeID).Error; err == nil && nodeRow.Name != "" {
+		nodeName = nodeRow.Name
+	}
+
 	result := map[string]interface{}{
-		"name":               name,
-		"status":             info.Status,
-		"image":              container.Image,
-		"password":           container.Password,
-		"cpu":                0,
-		"memory":             "",
-		"disk":               "",
-		"cpu_usage":          0.0,
-		"memory_usage":       "",
-		"memory_usage_raw":   0,
-		"disk_usage":         "",
-		"disk_usage_raw":     0,
+		"name":                name,
+		"status":              info.Status,
+		"image":               container.Image,
+		"node_id":             container.NodeID,
+		"node_name":           nodeName,
+		"password":            container.Password,
+		"cpu":                 0,
+		"memory":              "",
+		"disk":                "",
+		"cpu_usage":           0.0,
+		"memory_usage":        "",
+		"memory_usage_raw":    0,
+		"disk_usage":          "",
+		"disk_usage_raw":      0,
 		"traffic_usage":       "",
 		"traffic_usage_raw":   0,
 		"traffic_limit":       container.TrafficLimit,
@@ -717,10 +771,10 @@ func (s *ContainerService) GetInfo(ctx context.Context, name string) (map[string
 		"ipv6_mapping_limit":  container.IPv6MappingLimit,
 		"reverse_proxy_limit": container.ReverseProxyLimit,
 		"ipv4":                []string{},
-		"ipv6":               []string{},
-		"config":             info.Config,
-		"created_at":         info.Created,
-		"last_sync":          "",
+		"ipv6":                []string{},
+		"config":              info.Config,
+		"created_at":          info.Created,
+		"last_sync":           "",
 	}
 
 	if container.Image == "" {
@@ -842,15 +896,15 @@ func (s *ContainerService) retryGetContainerIPs(containerName string, needIPv4, 
 	ctx := context.Background()
 	maxRetries := 10
 	retryInterval := 2
-	
+
 	logger.Info("启动后台任务获取容器 %s 的IP地址 (IPv4: %v, IPv6: %v)", containerName, needIPv4, needIPv6)
-	
+
 	for i := 0; i < maxRetries; i++ {
 		time.Sleep(time.Duration(retryInterval) * time.Second)
-		
+
 		updateFields := make(map[string]interface{})
 		updated := false
-		
+
 		if needIPv4 {
 			if ipv4 := s.getContainerIP(ctx, containerName); ipv4 != "" {
 				updateFields["private_ip"] = ipv4
@@ -862,7 +916,7 @@ func (s *ContainerService) retryGetContainerIPs(containerName string, needIPv4, 
 				updated = true
 			}
 		}
-		
+
 		if needIPv6 {
 			if ipv6 := s.getContainerIPv6(ctx, containerName); ipv6 != "" {
 				updateFields["private_ipv6"] = ipv6
@@ -874,17 +928,17 @@ func (s *ContainerService) retryGetContainerIPs(containerName string, needIPv4, 
 				updated = true
 			}
 		}
-		
+
 		if updated {
 			db.DB.Model(&models.Container{}).Where("name = ?", containerName).Updates(updateFields)
 		}
-		
+
 		if !needIPv4 && !needIPv6 {
 			logger.OK("后台任务完成：容器 %s 的所有IP地址已获取", containerName)
 			return
 		}
 	}
-	
+
 	if needIPv4 {
 		logger.Warn("后台任务超时：容器 %s 的IPv4地址获取失败（已重试%d次）", containerName, maxRetries)
 	}
@@ -995,18 +1049,18 @@ func (s *ContainerService) updateContainerIPv6Rules(containerName, oldIP, newIP 
 
 func getContainerCPUUsagePercent(ctx context.Context, containerName string) float64 {
 	lxcClient := lxc.NewClient()
-	
+
 	output, err := lxcClient.ExecInContainer(ctx, containerName, []string{"sh", "-c", "vmstat 1 2 | tail -1 | awk '{print $15}'"})
 	if err != nil {
 		return 0
 	}
-	
+
 	idleStr := strings.TrimSpace(output)
 	idlePercent, err := strconv.ParseFloat(idleStr, 64)
 	if err != nil {
 		return 0
 	}
-	
+
 	cpuUsage := 100 - idlePercent
 	if cpuUsage < 0 {
 		cpuUsage = 0
@@ -1014,7 +1068,7 @@ func getContainerCPUUsagePercent(ctx context.Context, containerName string) floa
 	if cpuUsage > 100 {
 		cpuUsage = 100
 	}
-	
+
 	return cpuUsage
 }
 
@@ -1131,11 +1185,11 @@ func (s *ContainerService) UpdateConfig(ctx context.Context, name string, req *m
 		var existingBindings []models.IPv4Binding
 		db.DB.Where("container_name = ?", name).Find(&existingBindings)
 		usedCount := len(existingBindings)
-		
+
 		if *req.IPv4PoolLimit < usedCount {
 			return nil, fmt.Errorf("IPv4地址池限制不能小于已用数量，已用%d个地址", usedCount)
 		}
-		
+
 		dbUpdates["ipv4_pool_limit"] = *req.IPv4PoolLimit
 		updated = append(updated, "ipv4_pool_limit")
 	}
@@ -1143,7 +1197,7 @@ func (s *ContainerService) UpdateConfig(ctx context.Context, name string, req *m
 	if req.IPv4MappingLimit != nil && *req.IPv4MappingLimit >= 0 {
 		var existingMappings []models.PortMappingV4
 		db.DB.Where("container_name = ?", name).Find(&existingMappings)
-		
+
 		ruleMap := make(map[string]int)
 		for _, m := range existingMappings {
 			key := fmt.Sprintf("%d-%d-%d-%s", m.PublicPort, m.PublicPortEnd, m.ContainerPort, m.Protocol)
@@ -1155,16 +1209,16 @@ func (s *ContainerService) UpdateConfig(ctx context.Context, name string, req *m
 				}
 			}
 		}
-		
+
 		usedPorts := 0
 		for _, count := range ruleMap {
 			usedPorts += count
 		}
-		
+
 		if *req.IPv4MappingLimit < usedPorts {
 			return nil, fmt.Errorf("IPv4端口映射限制不能小于已用端口数，已用%d个端口", usedPorts)
 		}
-		
+
 		dbUpdates["ipv4_mapping_limit"] = *req.IPv4MappingLimit
 		updated = append(updated, "ipv4_mapping_limit")
 	}
@@ -1173,11 +1227,11 @@ func (s *ContainerService) UpdateConfig(ctx context.Context, name string, req *m
 		var existingBindings []models.IPv6Binding
 		db.DB.Where("container_name = ?", name).Find(&existingBindings)
 		usedCount := len(existingBindings)
-		
+
 		if *req.IPv6PoolLimit < usedCount {
 			return nil, fmt.Errorf("IPv6地址池限制不能小于已用数量，已用%d个地址", usedCount)
 		}
-		
+
 		dbUpdates["ipv6_pool_limit"] = *req.IPv6PoolLimit
 		updated = append(updated, "ipv6_pool_limit")
 	}
@@ -1185,7 +1239,7 @@ func (s *ContainerService) UpdateConfig(ctx context.Context, name string, req *m
 	if req.IPv6MappingLimit != nil && *req.IPv6MappingLimit >= 0 {
 		var existingMappings []models.PortMappingV6
 		db.DB.Where("container_name = ?", name).Find(&existingMappings)
-		
+
 		ruleMap := make(map[string]int)
 		for _, m := range existingMappings {
 			key := fmt.Sprintf("%d-%d-%d-%s", m.PublicPort, m.PublicPortEnd, m.ContainerPort, m.Protocol)
@@ -1197,16 +1251,16 @@ func (s *ContainerService) UpdateConfig(ctx context.Context, name string, req *m
 				}
 			}
 		}
-		
+
 		usedPorts := 0
 		for _, count := range ruleMap {
 			usedPorts += count
 		}
-		
+
 		if *req.IPv6MappingLimit < usedPorts {
 			return nil, fmt.Errorf("IPv6端口映射限制不能小于已用端口数，已用%d个端口", usedPorts)
 		}
-		
+
 		dbUpdates["ipv6_mapping_limit"] = *req.IPv6MappingLimit
 		updated = append(updated, "ipv6_mapping_limit")
 	}
@@ -1215,11 +1269,11 @@ func (s *ContainerService) UpdateConfig(ctx context.Context, name string, req *m
 		var existingProxies []models.ReverseProxy
 		db.DB.Where("container_name = ?", name).Find(&existingProxies)
 		usedCount := len(existingProxies)
-		
+
 		if *req.ReverseProxyLimit < usedCount {
 			return nil, fmt.Errorf("反向代理限制不能小于已用数量，已用%d个代理", usedCount)
 		}
-		
+
 		dbUpdates["reverse_proxy_limit"] = *req.ReverseProxyLimit
 		updated = append(updated, "reverse_proxy_limit")
 	}
@@ -1264,26 +1318,26 @@ func (s *ContainerService) GetConfig(name string) (map[string]interface{}, error
 	}
 
 	return map[string]interface{}{
-		"name":               container.Name,
-		"cpu":                container.CPU,
-		"memory":             container.Memory,
-		"disk":               container.Disk,
-		"ingress":            container.Ingress,
-		"egress":             container.Egress,
-		"cpu_allowance":      container.CPUAllowance,
-		"io_read":            container.IORead,
-		"io_write":           container.IOWrite,
-		"processes_limit":    container.ProcessesLimit,
-		"traffic_limit":      container.TrafficLimit,
-		"ipv4_pool_limit":    container.IPv4PoolLimit,
-		"ipv4_mapping_limit": container.IPv4MappingLimit,
-		"ipv6_pool_limit":    container.IPv6PoolLimit,
-		"ipv6_mapping_limit": container.IPv6MappingLimit,
+		"name":                container.Name,
+		"cpu":                 container.CPU,
+		"memory":              container.Memory,
+		"disk":                container.Disk,
+		"ingress":             container.Ingress,
+		"egress":              container.Egress,
+		"cpu_allowance":       container.CPUAllowance,
+		"io_read":             container.IORead,
+		"io_write":            container.IOWrite,
+		"processes_limit":     container.ProcessesLimit,
+		"traffic_limit":       container.TrafficLimit,
+		"ipv4_pool_limit":     container.IPv4PoolLimit,
+		"ipv4_mapping_limit":  container.IPv4MappingLimit,
+		"ipv6_pool_limit":     container.IPv6PoolLimit,
+		"ipv6_mapping_limit":  container.IPv6MappingLimit,
 		"reverse_proxy_limit": container.ReverseProxyLimit,
-		"remark":             container.Remark,
-		"privileged":         container.Privileged,
-		"memory_swap":        container.MemorySwap,
-		"allow_nesting":      container.AllowNesting,
+		"remark":              container.Remark,
+		"privileged":          container.Privileged,
+		"memory_swap":         container.MemorySwap,
+		"allow_nesting":       container.AllowNesting,
 	}, nil
 }
 
@@ -1297,10 +1351,10 @@ func (s *ContainerService) autoAllocateSSHPortV4(ctx context.Context, containerN
 	}
 
 	var natConfigs []models.NATConfigV4
-	if err := db.DB.Find(&natConfigs).Error; err != nil || len(natConfigs) == 0 {
+	if err := db.DB.Where("node_id = ? OR node_id = 0", effNode(container.NodeID)).Find(&natConfigs).Error; err != nil || len(natConfigs) == 0 {
 		return fmt.Errorf("未配置IPv4 NAT")
 	}
-	
+
 	natConfig := natConfigs[0]
 	displayIP := natConfig.DisplayIP
 	if displayIP == "" {
@@ -1312,12 +1366,12 @@ func (s *ContainerService) autoAllocateSSHPortV4(ctx context.Context, containerN
 	if err != nil {
 		return err
 	}
-	
+
 	_, err = portMappingSvc.AllocateV4Mapping(ctx, containerName, userID, natConfig.IP, displayIP, publicPort, publicPort, 22, 22, "tcp", natConfig.Interface, "Auto-allocated SSH port")
 	if err != nil {
 		return err
 	}
-	
+
 	logger.OK("自动分配IPv4 SSH端口: %s -> %s:%d", containerName, displayIP, publicPort)
 	return nil
 }
@@ -1332,10 +1386,10 @@ func (s *ContainerService) autoAllocateSSHPortV6(ctx context.Context, containerN
 	}
 
 	var natConfigs []models.NATConfigV6
-	if err := db.DB.Find(&natConfigs).Error; err != nil || len(natConfigs) == 0 {
+	if err := db.DB.Where("node_id = ? OR node_id = 0", effNode(container.NodeID)).Find(&natConfigs).Error; err != nil || len(natConfigs) == 0 {
 		return fmt.Errorf("未配置IPv6 NAT")
 	}
-	
+
 	natConfig := natConfigs[0]
 	displayIP := natConfig.DisplayIP
 	if displayIP == "" {
@@ -1347,12 +1401,12 @@ func (s *ContainerService) autoAllocateSSHPortV6(ctx context.Context, containerN
 	if err != nil {
 		return err
 	}
-	
+
 	_, err = portMappingSvc.AllocateV6Mapping(ctx, containerName, userID, natConfig.IP, displayIP, publicPort, publicPort, 22, 22, "tcp", natConfig.Interface, "Auto-allocated SSH port")
 	if err != nil {
 		return err
 	}
-	
+
 	logger.OK("自动分配IPv6 SSH端口: %s -> %s:%d", containerName, displayIP, publicPort)
 	return nil
 }

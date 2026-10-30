@@ -103,7 +103,7 @@ func ListFiles(c *gin.Context) {
 	}
 
 	svc := service.NewContainerService()
-	out, err := svc.GetLXCClient().ExecInContainer(c.Request.Context(), name, []string{"ls", "-la", "--full-time", p})
+	out, err := svc.ClientForContainer(name).ExecInContainer(c.Request.Context(), name, []string{"ls", "-la", "--full-time", p})
 	if err != nil {
 		logger.Error("列目录失败: %v", err)
 		response.Error(c, 500, "列目录失败: "+err.Error())
@@ -389,7 +389,7 @@ func DeleteFile(c *gin.Context) {
 	}
 
 	svc := service.NewContainerService()
-	_, err = svc.GetLXCClient().ExecInContainer(c.Request.Context(), name, []string{"rm", "-rf", "--", p})
+	_, err = svc.ClientForContainer(name).ExecInContainer(c.Request.Context(), name, []string{"rm", "-rf", "--", p})
 	if err != nil {
 		logger.Error("删除失败: %v", err)
 		response.Error(c, 500, "删除失败: "+err.Error())
@@ -443,7 +443,7 @@ func RenameFile(c *gin.Context) {
 	}
 
 	svc := service.NewContainerService()
-	_, err = svc.GetLXCClient().ExecInContainer(c.Request.Context(), name, []string{"mv", "--", src, dst})
+	_, err = svc.ClientForContainer(name).ExecInContainer(c.Request.Context(), name, []string{"mv", "--", src, dst})
 	if err != nil {
 		logger.Error("重命名失败: %v", err)
 		response.Error(c, 500, "重命名失败: "+err.Error())

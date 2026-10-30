@@ -138,7 +138,8 @@ func provisionOrderInternal(order *models.Order) error {
 		}
 	}
 	if image == "" {
-		image = "debian-12-net"
+		// 不再兜底硬编码镜像名：目标节点上未必有该镜像，猜错只会让开通在 LXD 层失败。
+		return fmt.Errorf("产品与节点均未配置镜像，无法开通")
 	}
 
 	name := order.ContainerName
@@ -157,13 +158,22 @@ func provisionOrderInternal(order *models.Order) error {
 		NodeID:       order.NodeID, // 节点路由：容器创建在订单归属节点上
 	}
 
-	// 产品级开关（允许嵌套 / 特权 / SWAP）随开通透传到容器
+	// 产品级开关（允许嵌套 / 特权 / SWAP）随开通透传到容器；
+	// 端口转发 / 域名绑定开关则换算成容器配额（用户中心与容器面板按配额>0 显示对应页签，
+	// 配额恒为 0 时入口被藏起来、全站无人能用，故开通时必须按开关写入默认配额）。
 	if order.ProductID != 0 {
 		var product models.Product
 		if err := db.DB.First(&product, order.ProductID).Error; err == nil {
 			req.AllowNesting = product.AllowNesting
 			req.Privileged = product.Privileged
 			req.MemorySwap = product.MemorySwap
+			if product.AllowPortForward {
+				req.IPv4MappingLimit = 5
+				req.IPv6MappingLimit = 5
+			}
+			if product.AllowDomainBinding {
+				req.ReverseProxyLimit = 5
+			}
 		}
 	}
 

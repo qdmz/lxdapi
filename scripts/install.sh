@@ -10,7 +10,7 @@ set -euo pipefail
 
 REPO="qdmz/lxdapi"
 BRANCH="${BRANCH:-main}"
-RELEASE_TAG="${RELEASE_TAG:-v0.05}"
+RELEASE_TAG="${RELEASE_TAG:-v0.06}"
 INSTALL_DIR="/opt/lxdapi"
 PANEL_DIR="/opt/lxdpanel"
 SRC_DIR=""

@@ -73,6 +73,7 @@
                         <h1 class="text-sm lg:text-base font-semibold text-gray-800 truncate">{{ .name }}</h1>
                         <div class="flex flex-col sm:flex-row sm:gap-3 lg:gap-4 text-xs mt-0.5">
                             <p class="text-gray-500 truncate">镜像: <span id="containerImage" class="font-medium text-gray-800">加载中...</span></p>
+                            <p class="text-gray-500 truncate">节点: <span id="containerNode" class="font-medium text-gray-800">加载中...</span></p>
                             <p class="text-gray-500 truncate">密码: <span id="containerPassword" class="font-mono font-medium text-gray-800">-</span></p>
                         </div>
                     </div>
@@ -119,7 +120,7 @@
 
         <div id="tabContent">
             <div id="infoTab" class="tab-pane" style="display: block;">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
             <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-md p-3 border border-gray-200">
                 <div class="flex items-center gap-2">
                     <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -162,6 +163,17 @@
                                 </svg>
                             </button>
                         </div>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-md p-3 border border-gray-200">
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                    <div class="flex-1">
+                        <p class="text-xs text-gray-600">到期时间</p>
+                        <p id="containerExpire" class="text-sm font-medium text-gray-800 mt-0.5">-</p>
                     </div>
                 </div>
             </div>
@@ -636,10 +648,26 @@
             
             $('#containerStatus').html(statusBadge);
             $('#containerImage').text(c.image || '未知镜像');
+            $('#containerNode').text(c.node_name || '-');
             $('#containerPassword').text(c.password || '-');
 
             $('#containerIPv4').text(c.ipv4 && c.ipv4.length > 0 ? c.ipv4.join(', ') : '-');
             $('#containerIPv6').text(c.ipv6 && c.ipv6.length > 0 ? c.ipv6.join(', ') : '-');
+
+            if (c.expire_at) {
+                const expDate = String(c.expire_at).slice(0, 10);
+                if (c.days_left !== null && c.days_left !== undefined && c.days_left < 0) {
+                    $('#containerExpire').html(expDate + ' <span class="text-red-600 font-semibold">已过期</span>');
+                } else if (c.days_left === 0) {
+                    $('#containerExpire').html(expDate + ' <span class="text-amber-600 font-semibold">今天到期</span>');
+                } else if (c.days_left !== null && c.days_left !== undefined) {
+                    $('#containerExpire').text(expDate + '（剩 ' + c.days_left + ' 天）');
+                } else {
+                    $('#containerExpire').text(expDate);
+                }
+            } else {
+                $('#containerExpire').text('-');
+            }
 
             const cpuUsage = c.cpu_usage || 0;
             const memoryUsed = c.memory_usage_raw || 0;
@@ -1265,17 +1293,18 @@
 
         function loadReinstallTemplates() {
             $.ajax({
-                url: '/api/user/templates',
+                // 按容器所属节点取镜像：重装只能用该节点上真实存在的镜像
+                url: '/api/user/templates?container=' + encodeURIComponent(containerName),
                 type: 'GET',
                 success: function(result) {
                     if (result.code === 200 && result.data) {
                         const templates = result.data;
                         let options = '<option value="">请选择镜像</option>';
                         templates.forEach(t => {
-                            const label = t.alias || t.fingerprint.substring(0, 12);
-                            const osInfo = t.os && t.release ? ` (${t.os} ${t.release})` : '';
-                            options += `<option value="${t.alias || t.fingerprint}">${label}${osInfo}</option>`;
+                            const label = t.display_name || t.alias || (t.os && t.release ? `${t.os} ${t.release}` : t.fingerprint.substring(0, 12));
+                            options += `<option value="${t.alias || t.fingerprint}">${label}</option>`;
                         });
+                        if (!templates.length) options = '<option value="">该节点暂无可用镜像</option>';
                         $('#reinstallImage').html(options);
                     }
                 },

@@ -1,8 +1,10 @@
 package opengfw
 
 import (
+	"context"
 	"fmt"
 	"lxdapi/internal/db"
+	"lxdapi/internal/node"
 	"lxdapi/models"
 	"lxdapi/pkg/logger"
 	"lxdapi/pkg/response"
@@ -11,6 +13,26 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// forwardIfRemote 若请求带的 node_id 是远程节点，把操作下发到该节点执行并写回响应。
+// 防火墙的配置与进程都长在节点本机：主控此前对远程节点只是存了一份从不生效的记录。
+// 返回 true 表示已处理（调用方直接返回）。
+func (h *APIHandlerV2) forwardIfRemote(c *gin.Context, method, action string, body interface{}) bool {
+	nodeID := parseNodeIDQuery(c)
+	if !node.IsRemoteNode(nodeID) {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
+	path := "/api/system/firewall/" + action + "?node_id=1"
+	var data interface{}
+	if err := node.ClientForNode(nodeID).RemoteDoJSON(ctx, method, path, body, &data); err != nil {
+		response.Error(c, 500, "节点防火墙操作失败: "+err.Error())
+		return true
+	}
+	response.Success(c, data)
+	return true
+}
 
 type APIHandlerV2 struct {
 	plugin *OpenGFWPlugin
@@ -21,6 +43,9 @@ func NewAPIHandlerV2(plugin *OpenGFWPlugin) *APIHandlerV2 {
 }
 
 func (h *APIHandlerV2) GetConfig(c *gin.Context) {
+	if h.forwardIfRemote(c, "GET", "config", nil) {
+		return
+	}
 	nodeID := parseNodeIDQuery(c)
 	var config models.FirewallConfig
 	if err := db.DB.Where("node_id = ?", nodeID).First(&config).Error; err != nil {
@@ -53,6 +78,10 @@ func (h *APIHandlerV2) UpdateConfig(c *gin.Context) {
 		return
 	}
 
+	if h.forwardIfRemote(c, "PUT", "config", req) {
+		return
+	}
+
 	nodeID := parseNodeIDQuery(c)
 	var config models.FirewallConfig
 	if err := db.DB.Where("node_id = ?", nodeID).First(&config).Error; err != nil {
@@ -75,6 +104,9 @@ func (h *APIHandlerV2) UpdateConfig(c *gin.Context) {
 }
 
 func (h *APIHandlerV2) ApplyConfig(c *gin.Context) {
+	if h.forwardIfRemote(c, "POST", "apply", nil) {
+		return
+	}
 	if err := h.plugin.ApplyConfig(); err != nil {
 		logger.Error("应用配置失败: %v", err)
 		response.Error(c, 500, "应用配置失败: "+err.Error())
@@ -89,6 +121,9 @@ func (h *APIHandlerV2) ApplyConfig(c *gin.Context) {
 }
 
 func (h *APIHandlerV2) GetStatus(c *gin.Context) {
+	if h.forwardIfRemote(c, "GET", "status", nil) {
+		return
+	}
 	stats, err := h.plugin.processManager.GetStatus()
 	if err != nil {
 		response.Error(c, 500, "获取状态失败: "+err.Error())
@@ -103,6 +138,9 @@ func (h *APIHandlerV2) GetStatus(c *gin.Context) {
 }
 
 func (h *APIHandlerV2) StartService(c *gin.Context) {
+	if h.forwardIfRemote(c, "POST", "start", nil) {
+		return
+	}
 	db.DB.Model(&models.FirewallConfig{}).Where("id = 1").Update("enabled", true)
 	
 	if err := h.plugin.loadConfig(); err != nil {
@@ -120,6 +158,9 @@ func (h *APIHandlerV2) StartService(c *gin.Context) {
 }
 
 func (h *APIHandlerV2) StopService(c *gin.Context) {
+	if h.forwardIfRemote(c, "POST", "stop", nil) {
+		return
+	}
 	if err := h.plugin.Stop(); err != nil {
 		response.Error(c, 500, "停止失败: "+err.Error())
 		return
@@ -132,6 +173,9 @@ func (h *APIHandlerV2) StopService(c *gin.Context) {
 }
 
 func (h *APIHandlerV2) RestartService(c *gin.Context) {
+	if h.forwardIfRemote(c, "POST", "restart", nil) {
+		return
+	}
 	if err := h.plugin.processManager.Restart(); err != nil {
 		response.Error(c, 500, "重启失败: "+err.Error())
 		return
@@ -142,6 +186,9 @@ func (h *APIHandlerV2) RestartService(c *gin.Context) {
 }
 
 func (h *APIHandlerV2) GetLogs(c *gin.Context) {
+	if h.forwardIfRemote(c, "GET", "logs", nil) {
+		return
+	}
 	lines := 100
 	if l := c.Query("lines"); l != "" {
 		var err error
@@ -160,6 +207,9 @@ func (h *APIHandlerV2) GetLogs(c *gin.Context) {
 }
 
 func (h *APIHandlerV2) ClearLogs(c *gin.Context) {
+	if h.forwardIfRemote(c, "DELETE", "logs", nil) {
+		return
+	}
 	if err := h.plugin.processManager.ClearLogs(); err != nil {
 		response.Error(c, 500, "清空日志失败: "+err.Error())
 		return

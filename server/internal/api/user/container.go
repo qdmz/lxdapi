@@ -3,10 +3,13 @@ package user
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"lxdapi/internal/cache"
 	"lxdapi/internal/db"
 	"lxdapi/internal/executor"
+	noderesolver "lxdapi/internal/node"
 	"lxdapi/internal/service"
 	"lxdapi/internal/traffic"
 	"lxdapi/models"
@@ -25,6 +28,7 @@ type UserCreateContainerRequest struct {
 	Name              string `json:"name" binding:"required"`
 	Password          string `json:"password"`
 	Image             string `json:"image" binding:"required"`
+	NodeID            uint   `json:"node_id"` // 归属节点，0/本机=默认节点；镜像须是该节点上有的
 	CPU               int    `json:"cpu"`
 	Memory            int    `json:"memory"`
 	Disk              int    `json:"disk"`
@@ -102,10 +106,26 @@ func CreateContainer(c *gin.Context) {
 		return
 	}
 
+	// 指定了节点时先校验节点存在且镜像在该节点有模板，避免建单后在错误节点上失败
+	if req.NodeID != 0 {
+		var node models.Node
+		if err := db.DB.First(&node, req.NodeID).Error; err != nil {
+			response.Error(c, 400, "指定的节点不存在")
+			return
+		}
+		var tplCount int64
+		db.DB.Model(&models.Template{}).Where("node_id = ? AND (alias = ? OR fingerprint = ?)", req.NodeID, req.Image, req.Image).Count(&tplCount)
+		if tplCount == 0 {
+			response.Error(c, 400, "该节点上没有此镜像，请换节点或镜像")
+			return
+		}
+	}
+
 	createReq := &models.CreateContainerRequest{
 		Name:              req.Name,
 		Password:          req.Password,
 		Image:             req.Image,
+		NodeID:            req.NodeID,
 		CPU:               req.CPU,
 		Memory:            req.Memory,
 		Disk:              req.Disk,
@@ -130,6 +150,7 @@ func CreateContainer(c *gin.Context) {
 	params := map[string]interface{}{
 		"name":               createReq.Name,
 		"image":              createReq.Image,
+		"node_id":            createReq.NodeID,
 		"cpu":                createReq.CPU,
 		"memory":             createReq.Memory,
 		"disk":               createReq.Disk,
@@ -223,6 +244,76 @@ func DeleteContainer(c *gin.Context) {
 	})
 }
 
+// currentUserID 取当前登录用户的数字 ID（orders.user_id 用它关联）
+func currentUserID(c *gin.Context) uint {
+	if v, ok := c.Get("user_id"); ok {
+		switch id := v.(type) {
+		case uint:
+			return id
+		case int:
+			return uint(id)
+		case int64:
+			return uint(id)
+		case float64:
+			return uint(id)
+		}
+	}
+	// 兜底：按用户名查一次
+	if username, _ := c.Get("username"); username != nil {
+		if name, ok := username.(string); ok && name != "" {
+			var u models.User
+			if err := db.DB.Select("id").Where("username = ?", name).First(&u).Error; err == nil {
+				return u.ID
+			}
+		}
+	}
+	return 0
+}
+
+// containerExpiryInfo 容器到期信息（取自最近一笔 active 订单）
+type containerExpiryInfo struct {
+	ExpireAt *time.Time `json:"expire_at"`
+	DaysLeft *int       `json:"days_left"`
+}
+
+// daysLeftUntil 计算距到期剩余天数（按自然日计，今天到期为 0，已过期为负）
+func daysLeftUntil(expire time.Time) int {
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	expDay := time.Date(expire.Year(), expire.Month(), expire.Day(), 0, 0, 0, 0, expire.Location())
+	return int(expDay.Sub(today).Hours() / 24)
+}
+
+// latestContainerExpiries 批量查询多个容器的到期时间：
+// 按 container_name 一次 IN 查询该用户全部 active 订单（未删除由 GORM 默认作用域保证），
+// 按创建时间倒序后每个容器取第一笔，避免列表页逐容器查库（N+1）。
+// 续费订单在开通时已把 container_name 回填为目标容器名，故同样能命中。
+func latestContainerExpiries(userID uint, names []string) map[string]containerExpiryInfo {
+	result := make(map[string]containerExpiryInfo)
+	if userID == 0 || len(names) == 0 {
+		return result
+	}
+	var orders []models.Order
+	if err := db.DB.Select("container_name, expire_at").
+		Where("user_id = ? AND status = ? AND container_name IN ?", userID, "active", names).
+		Order("created_at DESC").Find(&orders).Error; err != nil {
+		logger.Warn("查询容器到期时间失败: %v", err)
+		return result
+	}
+	for _, o := range orders {
+		if o.ExpireAt == nil {
+			continue
+		}
+		if _, ok := result[o.ContainerName]; ok {
+			continue // 已按 created_at 倒序，第一笔即最新
+		}
+		exp := *o.ExpireAt
+		d := daysLeftUntil(exp)
+		result[o.ContainerName] = containerExpiryInfo{ExpireAt: &exp, DaysLeft: &d}
+	}
+	return result
+}
+
 // ListContainers 获取容器列表
 // @Summary 获取容器列表
 // @Description 获取当前用户的所有容器
@@ -234,9 +325,9 @@ func DeleteContainer(c *gin.Context) {
 // @Router /api/user/containers [get]
 func ListContainers(c *gin.Context) {
 	username, _ := c.Get("username")
-	
+
 	allContainers := cache.GetAllContainersCache()
-	
+
 	userContainers := []cache.ContainerCacheJSON{}
 	for _, container := range allContainers {
 		dbContainer, err := containerService.Get(container.Name)
@@ -245,9 +336,31 @@ func ListContainers(c *gin.Context) {
 		}
 	}
 
+	// 到期时间：批量查最近一笔 active 订单后逐个挂到列表项上
+	names := make([]string, 0, len(userContainers))
+	for _, uc := range userContainers {
+		names = append(names, uc.Name)
+	}
+	expiries := latestContainerExpiries(currentUserID(c), names)
+
+	type containerListItem struct {
+		cache.ContainerCacheJSON
+		ExpireAt *time.Time `json:"expire_at"`
+		DaysLeft *int       `json:"days_left"`
+	}
+	items := make([]containerListItem, 0, len(userContainers))
+	for _, uc := range userContainers {
+		item := containerListItem{ContainerCacheJSON: uc}
+		if exp, ok := expiries[uc.Name]; ok {
+			item.ExpireAt = exp.ExpireAt
+			item.DaysLeft = exp.DaysLeft
+		}
+		items = append(items, item)
+	}
+
 	response.Success(c, gin.H{
-		"data":  userContainers,
-		"count": len(userContainers),
+		"data":  items,
+		"count": len(items),
 	})
 }
 
@@ -290,6 +403,15 @@ func GetContainer(c *gin.Context) {
 		logger.Warn("获取容器详细信息失败: %v", err)
 		response.Error(c, 500, "获取容器信息失败")
 		return
+	}
+
+	// 到期时间：最近一笔 active 订单的 expire_at（无订单时为 null）
+	if exp, ok := latestContainerExpiries(currentUserID(c), []string{name})[name]; ok {
+		info["expire_at"] = exp.ExpireAt
+		info["days_left"] = exp.DaysLeft
+	} else {
+		info["expire_at"] = nil
+		info["days_left"] = nil
 	}
 
 	response.Success(c, info)
@@ -1100,7 +1222,7 @@ func GetContainerDNS(c *gin.Context) {
 	}
 	
 	ctx := context.Background()
-	lxcClient := service.NewContainerService().GetLXCClient()
+	lxcClient := noderesolver.ClientForContainer(name)
 	dnsServers, err := lxcClient.GetContainerDNS(ctx, name)
 	if err != nil {
 		response.Error(c, 500, err.Error())
@@ -1137,7 +1259,7 @@ func SetContainerDNS(c *gin.Context) {
 	}
 	
 	ctx := context.Background()
-	lxcClient := service.NewContainerService().GetLXCClient()
+	lxcClient := noderesolver.ClientForContainer(name)
 	
 	if err := lxcClient.SetContainerDNS(ctx, name, req.DNS); err != nil {
 		response.Error(c, 500, err.Error())

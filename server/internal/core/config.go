@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"html/template"
 	"os"
 	"path/filepath"
 	"sync"
@@ -25,11 +26,36 @@ type SystemConfig struct {
 	Database DatabaseConfig `yaml:"database"`
 }
 
+// 模板热加载触发器：由 main 在启动时注册，供 admin 在线编辑器手动触发。
+var templateReloader func()
+
+// RegisterTemplateReloader 注册模板热加载函数（main 启动时调用）。
+func RegisterTemplateReloader(fn func()) { templateReloader = fn }
+
+// TriggerTemplateReload 触发一次模板热加载；未注册则无操作。
+func TriggerTemplateReload() {
+	if templateReloader != nil {
+		templateReloader()
+	}
+}
+
+// 当前已加载的模板集合（供在线预览克隆使用）
+var currentTemplateSet *template.Template
+
+// SetTemplateSet 记录当前生效的模板集合（main 每次 SetHTMLTemplate 时调用）
+func SetTemplateSet(t *template.Template) { currentTemplateSet = t }
+
+// GetTemplateSet 获取当前模板集合（在线预览用）
+func GetTemplateSet() *template.Template { return currentTemplateSet }
+
 type ServerConfig struct {
 	Host string    `yaml:"host"`
 	Port int       `yaml:"port"`
 	Mode string    `yaml:"mode"`
 	TLS  TLSConfig `yaml:"tls"`
+	// TemplatesDir 外部模板目录（磁盘优先）。为空则使用内置 embed 模板。
+	// 设置后：首次运行会把内置模板导出到该目录，修改文件实时热加载，无需重新编译。
+	TemplatesDir string `yaml:"templates_dir"`
 }
 
 type TLSConfig struct {

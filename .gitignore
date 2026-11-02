@@ -27,3 +27,6 @@ server/plugins/opengfw/data/
 .idea/
 .vscode/
 node_modules/
+
+# 外部模板工作目录（方案A+B：磁盘优先+热加载，由内置模板导出，勿提交）
+server/templates_dev/

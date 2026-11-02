@@ -8,6 +8,9 @@ system:
     port: 8081
     # 运行模式: debug/release
     mode: "release"
+    # 外部模板目录（磁盘优先 + 热加载）。留空则用内置模板。
+    # 设置后首次运行会把内置模板导出到该目录，改文件实时生效、无需重新编译。
+    templates_dir: "templates_dev"
     # TLS/HTTPS配置
     tls:
       # 启用HTTPS

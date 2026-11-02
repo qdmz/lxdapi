@@ -44,7 +44,6 @@ import (
 	"lxdapi/plugins/opengfw"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 )
 
@@ -52,7 +51,7 @@ import (
 var embeddedFiles embed.FS
 
 // Version 版本号
-var Version = "0.06"
+var Version = "0.07"
 
 func main() {
 	if err := core.LoadConfig("configs/config.yaml"); err != nil {
@@ -278,59 +277,30 @@ func main() {
 	r.Use(sessions.Sessions("lxdapi_session", store))
 	r.Use(middleware.BrandMiddleware())
 
-	tmpl := template.New("").Funcs(template.FuncMap{})
-
-	templatesFS, err := fs.Sub(embeddedFiles, "templates")
-	if err != nil {
-		logger.Error("加载嵌入式模板失败: %v", err)
-		patterns := []string{
-			"templates/*.html",
-			"templates/admin/*.html",
-			"templates/user/*.html",
-			"templates/container/*.html",
-		}
-
-		for _, pattern := range patterns {
-			files, err := filepath.Glob(pattern)
-			if err != nil {
-				logger.Error("加载模板失败 %s: %v", pattern, err)
-				continue
-			}
-			for _, file := range files {
-				name := filepath.ToSlash(file[len("templates/"):])
-				content, err := os.ReadFile(file)
-				if err != nil {
-					logger.Error("读取模板失败 %s: %v", file, err)
-					continue
-				}
-				_, err = tmpl.New(name).Parse(string(content))
-				if err != nil {
-					logger.Error("解析模板失败 %s: %v", file, err)
-				}
-			}
-		}
-	} else {
-		fs.WalkDir(templatesFS, ".", func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || filepath.Ext(path) != ".html" {
-				return nil
-			}
-
-			content, err := fs.ReadFile(templatesFS, path)
-			if err != nil {
-				logger.Error("读取嵌入式模板失败 %s: %v", path, err)
-				return nil
-			}
-
-			name := filepath.ToSlash(path)
-			_, err = tmpl.New(name).Parse(string(content))
-			if err != nil {
-				logger.Error("解析嵌入式模板失败 %s: %v", path, err)
-			}
-			return nil
-		})
+	// 应用模板：同时更新 Gin 渲染器与 core 记录的模板集合（供在线预览克隆）
+	applyTemplates := func(t *template.Template) {
+		r.SetHTMLTemplate(t)
+		core.SetTemplateSet(t)
 	}
 
-	r.SetHTMLTemplate(tmpl)
+	// 方案 A+B：模板优先从磁盘目录加载（支持热重载），未配置则使用内置 embed
+	tmpl, err := loadTemplates(cfg.System.Server.TemplatesDir)
+	if err != nil {
+		logger.Error("加载模板失败: %v", err)
+	} else {
+		applyTemplates(tmpl)
+	}
+	// 方案 B：配置了外部模板目录时，启动 fsnotify 热加载，修改文件无需重启
+	watchTemplates(cfg.System.Server.TemplatesDir, func(t *template.Template) {
+		applyTemplates(t)
+	})
+	// 方案 C：注册手动热加载触发器，供在线模板编辑器保存后立即生效
+	core.RegisterTemplateReloader(func() {
+		if t, reloadErr := loadTemplates(cfg.System.Server.TemplatesDir); reloadErr == nil {
+			applyTemplates(t)
+			logger.OK("模板已手动热加载")
+		}
+	})
 	logger.OK("模板加载完成")
 
 	r.NoRoute(func(c *gin.Context) {
@@ -435,6 +405,18 @@ func main() {
 		adminPages.GET("/firewall", handlers.AdminFirewall)
 		adminPages.GET("/nginx", handlers.AdminNginx)
 		adminPages.GET("/storage-pools", handlers.AdminStoragePools)
+		adminPages.GET("/template-editor", handlers.AdminTemplateEditor)
+	}
+
+	// 方案 C：在线模板编辑器 API（需管理员登录）
+	templateEditorAPI := r.Group("/api/admin/template-files")
+	templateEditorAPI.Use(middleware.AdminAuth())
+	{
+		templateEditorAPI.GET("", admin.ListTemplateFiles)
+		templateEditorAPI.GET("/content", admin.GetTemplateFile)
+		templateEditorAPI.POST("/save", admin.SaveTemplateFile)
+		templateEditorAPI.POST("/reload", admin.ReloadTemplates)
+		templateEditorAPI.POST("/preview", admin.PreviewTemplateFile)
 	}
 
 	r.POST("/api/admin/logout", admin.Logout)

@@ -3,7 +3,7 @@
 基于 **LXD** 的容器管理面板：Go 后端 + 纯静态前端，支持管理后台、用户后台、容器自助面板三级体系，内置 Web 终端（WebSocket）。
 
 - 仓库：https://github.com/qdmz/lxdapi
-- 当前版本：**v0.06**
+- 当前版本：**v0.08**
 
 ### 在线演示
 
@@ -30,6 +30,7 @@
 - **营销与内容**：优惠券（领取/下单核销）、知识库（公开帮助中心 + 后台维护）
 - **客服与消息**：工单系统（用户/管理员双端对话）、站内通知（计数与列表一致、定向发送到具体用户）
 - **系统**：SMTP 邮件与模板、品牌设置、验证码、`/api/public/version` 与 `/healthz`
+- **外置模板 + 在线编辑器（v0.07/v0.08）**：内置模板与 `templates_dev` 双套并存，**dev 优先、dev 不存在时自动回退内置**；后台「模板编辑器」可在线可视化编辑 `templates_dev` 下的 HTML，保存即**热加载**生效（无需重启），并支持所见即所得实时预览
 
 ### 运行截图
 
@@ -64,7 +65,7 @@ curl -fsSL https://raw.githubusercontent.com/qdmz/lxdapi/main/scripts/install.sh
 | `--domain panel.example.com` | 写入 nginx `server_name` |
 | `--skip-lxd` | 已装好 LXD 时跳过安装与初始化 |
 | `--no-image` | 不制作 debian-12-net 镜像 |
-| `--tag v0.06` | 指定下载的 Release 版本 |
+| `--tag v0.08` | 指定下载的 Release 版本 |
 | `--branch main` | 指定拉取的分支 |
 
 示例：
@@ -183,6 +184,7 @@ cp configs/config.yaml /opt/lxdapi/configs/    # 或用 deploy/config.example.ya
 | `admin.session_secret` | 会话密钥，改成随机串 |
 | `security.api_hash` | 系统级 API 密钥（`X-API-Hash` 头） |
 | `lxc.socket` | LXD socket 路径，snap 安装为 `/var/snap/lxd/common/lxd/unix.socket` |
+| `system.server.templates_dir` | 外部模板目录（默认 `templates_dev`）。留空则用内置 embed 模板；配置后首次运行自动导出内置模板到该目录，修改文件即热加载。后台在线模板编辑器编辑的就是此目录 |
 
 ### 5. systemd 服务
 
@@ -351,6 +353,13 @@ netfilter-persistent save
 
 ## 版本记录
 
+- **v0.08** — 模板 `templates_dev` 纳入版本管理（防止环境重置丢失在线编辑成果）+ 版本号 0.07→0.08。
+- **v0.07** — 模板外置与在线可视化编辑器（A+B+C）：
+  - **方案 A+B**：HTML 模板支持磁盘目录优先加载（内置 embed 回退），首次运行自动导出内置模板到 `templates_dir`；用 2s mtime 轮询实现热加载（兼容沙箱 overlay FS），保存即生效无需重启。
+  - **方案 C**：新增管理员在线模板编辑器（`/admin/template-editor`），支持文件列表、搜索、编辑、保存、手动重新加载。
+  - **所见即所得预览**：`POST /api/admin/template-files/preview` 以磁盘真实模板集（含 header/footer/品牌）渲染当前编辑内容，前端弹窗 iframe 实时预览并自动刷新。
+  - **安全与鉴权**：`safeTemplatePath` 防路径穿越与越权，仅允许 `.html`；编辑器页面走 `AdminPageAuth`（302），API 走 `AdminAuth`（JSON 401）。
+  - 新增配置 `system.server.templates_dir`。
 - **v0.06** — 多节点统一与体验补齐：
   - **节点归属贯通**：容器的创建、重装、启停、改密、删除、改配置、控制台、SFTP、DNS、端口映射、域名反代、IP 分配/释放、NAT 配置、缓存刷新、CPU/流量采样全部按容器所属节点执行；远程节点经其自身系统 API（`X-API-Hash`）操作，不再静默落到本机。管理端防火墙/OpenGFW 与 Nginx 反代状态可按节点远程读取（节点侧需启用对应插件）。
   - **远程等待 fail-fast**：主控远程创建/重装改为按节点任务状态判定，节点失败立即带错误返回，不再空等超时。

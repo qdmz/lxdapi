@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <link href="/static/css/daisyui.min.css" rel="stylesheet">
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    {{else}}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {{end}}
+</head>
+<body class="min-h-screen flex flex-col">
+{{template "admin/admin_header.html" .}}
+<div class="flex-1" style="background-color: #f9fafb;">
+<div class="max-w-5xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+    <div class="mb-4 sm:mb-6">
+        <h1 class="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+            <span class="iconify" data-icon="mdi:credit-card-outline" data-width="20"></span>易支付配置
+        </h1>
+        <p class="text-xs sm:text-sm text-gray-500 mt-1">对接易支付（彩虹/码支付等兼容平台）用于套餐余额充值；保存后立即生效。</p>
+    </div>
+    <div id="alertBox" class="hidden mb-4 text-sm rounded-lg px-3 py-2"></div>
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-5 mb-4">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">商户信息</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <label class="flex items-center gap-2 text-sm text-gray-700 sm:col-span-2">
+                <input type="checkbox" id="payEnabled" class="rounded border-gray-300"> 启用易支付
+            </label>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">支付网关地址</div>
+                <input id="payApiURL" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://pay.example.com/">
+            </div>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">商户 ID（PID）</div>
+                <input id="payPid" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="1001">
+            </div>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">商户密钥（KEY）</div>
+                <input id="payKey" type="password" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <div class="text-xs text-gray-600 mb-1">通讯密钥（SignKey，可选）</div>
+                <input id="paySignKey" type="password" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="sm:col-span-2">
+                <div class="text-xs text-gray-600 mb-1">异步通知地址（回调 URL，留空自动生成）</div>
+                <input id="payCallback" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://your-domain/api/payment/notify">
+            </div>
+        </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+        <button onclick="saveConfig()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">保存配置</button>
+        <span id="statusText" class="text-xs text-gray-500"></span>
+    </div>
+</div>
+<script>
+function showAlert(type, msg) {
+    var el = document.getElementById('alertBox');
+    el.className = 'mb-4 text-sm rounded-lg px-3 py-2 ' + (type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700');
+    el.textContent = msg;
+}
+function loadConfig() {
+    $.get('/api/admin/payconfig', function (r) {
+        if (r.code !== 200) { showAlert('error', r.msg || '加载失败'); return; }
+        var s = r.data || {};
+        document.getElementById('payEnabled').checked = !!s.Enabled;
+        document.getElementById('payApiURL').value = s.APIURL || '';
+        document.getElementById('payPid').value = s.PID || '';
+        document.getElementById('payKey').value = s.Key || '';
+        document.getElementById('paySignKey').value = s.SignKey || '';
+        document.getElementById('payCallback').value = s.CallbackURL || '';
+    });
+}
+function saveConfig() {
+    var apiURL = document.getElementById('payApiURL').value;
+    if (document.getElementById('payEnabled').checked && !apiURL) {
+        showAlert('error', '启用易支付时必须填写支付网关地址');
+        return;
+    }
+    $.ajax({
+        url: '/api/admin/payconfig', type: 'POST', contentType: 'application/json',
+        data: JSON.stringify({
+            enabled: document.getElementById('payEnabled').checked,
+            apiurl: apiURL,
+            pid: document.getElementById('payPid').value,
+            key: document.getElementById('payKey').value,
+            signkey: document.getElementById('paySignKey').value,
+            callbackurl: document.getElementById('payCallback').value
+        }),
+        success: function (r) {
+            if (r.code === 200) showAlert('success', '配置已保存');
+            else showAlert('error', r.msg || '保存失败');
+        },
+        error: function () { showAlert('error', '请求失败'); }
+    });
+}
+$(function () { loadConfig(); });
+</script>
+</div>
+</div>
+{{template "admin/admin_footer.html" .}}
+</body>
+</html>

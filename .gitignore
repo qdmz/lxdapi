@@ -28,5 +28,7 @@ server/plugins/opengfw/data/
 .vscode/
 node_modules/
 
-# 外部模板工作目录（方案A+B：磁盘优先+热加载，由内置模板导出，勿提交）
-server/templates_dev/
+# 外部模板工作目录（方案A+B：磁盘优先+热加载）
+# 说明：templates_dev 现在纳入版本管理，作为「dev 可编辑模板集」的基线。
+# 在线编辑器对它的修改经 git commit 后持久保存，环境重置也不会丢失。
+# 若需从内置模板重建基线：删除本目录后重启服务即自动重新导出。

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <link href="/static/css/daisyui.min.css" rel="stylesheet">
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    {{else}}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {{end}}
+</head>
+<body class="min-h-screen flex flex-col" style="background-color:#f9fafb">
+{{template "admin/admin_header.html" .}}
+<div class="flex-1" style="background-color: #f9fafb;">
+<div class="max-w-5xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
+        <div>
+            <h1 class="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+                <span class="iconify" data-icon="mdi:message-outline" data-width="20"></span>站内消息
+            </h1>
+            <p class="text-xs sm:text-sm text-gray-500 mt-1">查看系统向用户发送的通知与广播记录。</p>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 mb-4">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+            <select id="filterType" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px]">
+                <option value="">全部类型</option>
+                <option value="system">系统</option>
+                <option value="ticket">工单</option>
+                <option value="order">订单</option>
+                <option value="promotion">公告</option>
+            </select>
+            <button onclick="loadNotifs(1)" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">查询</button>
+        </div>
+    </div>
+
+    <div id="notifList" class="space-y-3"></div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 mt-4">
+        <h2 class="text-sm font-bold text-gray-800 mb-3">发送通知给用户</h2>
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+            <select id="sendUserId" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 w-52">
+                <option value="">选择接收用户</option>
+            </select>
+            <input id="sendTitle" type="text" placeholder="标题" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[160px]" />
+            <input id="sendContent" type="text" placeholder="内容" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[200px]" />
+            <button onclick="sendNotif()" class="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition">发送</button>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-between mt-4">
+        <div id="pagerInfo" class="text-xs text-gray-500"></div>
+        <div class="flex items-center gap-2">
+            <button id="prevBtn" onclick="changePage(-1)" class="px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-40">上一页</button>
+            <span id="pagerText" class="text-sm text-gray-600">1 / 1</span>
+            <button id="nextBtn" onclick="changePage(1)" class="px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-40">下一页</button>
+        </div>
+    </div>
+</div>
+
+<script>
+var API = '/api/admin';
+var currentPage = 1;
+var pageSize = 20;
+var totalPage = 1;
+
+function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+function fmtTime(s) {
+    if (!s) return '-';
+    return String(s).replace('T', ' ').substring(0, 19);
+}
+function typeBadge(t) {
+    var map = { system: '系统', ticket: '工单', order: '订单', promotion: '公告' };
+    var cls = { system: 'bg-gray-100 text-gray-600', ticket: 'bg-amber-100 text-amber-700', order: 'bg-blue-100 text-blue-700', promotion: 'bg-green-100 text-green-700' };
+    return '<span class="px-2 py-0.5 rounded-full text-xs ' + (cls[t] || cls.system) + '">' + (map[t] || t || '系统') + '</span>';
+}
+
+function loadNotifs(page) {
+    currentPage = page || 1;
+    var type = document.getElementById('filterType').value;
+    var url = API + '/notifications?page=' + currentPage + '&page_size=' + pageSize;
+    if (type) url += '&type=' + encodeURIComponent(type);
+    $.get(url, function (r) {
+        if (r.code !== 200) { alert(r.msg || '加载失败'); return; }
+        var d = r.data || {};
+        totalPage = Math.max(1, Math.ceil((d.total || 0) / pageSize));
+        renderList(d.list || []);
+        document.getElementById('pagerText').textContent = currentPage + ' / ' + totalPage;
+        document.getElementById('pagerInfo').textContent = '共 ' + (d.total || 0) + ' 条通知';
+        document.getElementById('prevBtn').disabled = currentPage <= 1;
+        document.getElementById('nextBtn').disabled = currentPage >= totalPage;
+    });
+}
+function changePage(delta) { loadNotifs(currentPage + delta); }
+
+function renderList(list) {
+    var el = document.getElementById('notifList');
+    if (!list.length) {
+        el.innerHTML = '<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-400 text-sm">暂无通知</div>';
+        return;
+    }
+    el.innerHTML = list.map(function (n) {
+        var nid = n.id || n.ID;
+        var title = n.title || n.Title || '';
+        var content = n.content || n.Content || '';
+        var type = n.type || n.Type || 'system';
+        var uid = n.user_id || n.UserID || 0;
+        var isRead = (n.is_read !== undefined) ? n.is_read : (n.IsRead || false);
+        var createdAt = n.created_at || n.CreatedAt;
+        return '<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">' +
+            '<div class="flex items-center justify-between gap-3 mb-2">' +
+            '<span class="font-medium text-gray-800">#' + nid + ' ' + esc(title) + '</span>' +
+            '<div class="flex items-center gap-2">' + typeBadge(type) +
+            '<span class="text-xs text-gray-400">' + fmtTime(createdAt) + '</span></div></div>' +
+            '<p class="text-sm text-gray-600 whitespace-pre-wrap mb-2">' + esc(content) + '</p>' +
+            '<div class="flex items-center justify-between"><div class="text-xs text-gray-400">用户ID: ' + uid + (isRead ? ' · 已读' : ' · 未读') + '</div>' +
+            '<button onclick="delNotif(' + nid + ')" class="px-2 py-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition">删除</button></div>' +
+            '</div>';
+    }).join('');
+}
+
+function delNotif(id) {
+    if (!confirm('确定删除这条通知吗？')) return;
+    $.ajax({
+        url: API + '/notifications/' + id,
+        type: 'DELETE',
+        success: function (r) {
+            if (r.code === 200) { loadNotifs(currentPage); }
+            else { alert(r.msg || '删除失败'); }
+        },
+        error: function () { alert('请求失败'); }
+    });
+}
+
+// 接收用户下拉：从管理员用户列表拉取，避免手填不存在的
+// 数字 ID 导致发送时撞外键、只报笼统的"创建通知失败"。
+function loadUsers() {
+    $.get(API + '/users?page=1&page_size=200', function (r) {
+        if (r.code !== 200) return;
+        var users = (r.data && r.data.users) || [];
+        var sel = document.getElementById('sendUserId');
+        users.forEach(function (u) {
+            var id = (u.ID !== undefined && u.ID !== null) ? u.ID : u.id;
+            var name = u.Username || u.username || '';
+            if (id === undefined || id === null) return;
+            var opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = name + ' (#' + id + ')';
+            sel.appendChild(opt);
+        });
+    });
+}
+
+function sendNotif() {
+    var uid = document.getElementById('sendUserId').value;
+    var title = document.getElementById('sendTitle').value;
+    var content = document.getElementById('sendContent').value;
+    if (!uid || !title || !content) { alert('接收用户、标题、内容都必填'); return; }
+    $.ajax({
+        url: API + '/notifications',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ user_id: parseInt(uid), title: title, content: content, type: 'system' }),
+        success: function (r) {
+            if (r.code === 200) {
+                document.getElementById('sendUserId').value = '';
+                document.getElementById('sendTitle').value = '';
+                document.getElementById('sendContent').value = '';
+                loadNotifs(1);
+            } else { alert(r.msg || '发送失败'); }
+        },
+        error: function () { alert('请求失败'); }
+    });
+}
+
+loadUsers();
+loadNotifs(1);
+</script>
+</div>
+</div>
+{{template "admin/admin_footer.html" .}}
+</body>
+</html>

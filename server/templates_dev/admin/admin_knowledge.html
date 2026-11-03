@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <link href="/static/css/daisyui.min.css" rel="stylesheet">
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    {{else}}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {{end}}
+</head>
+<body class="min-h-screen flex flex-col" style="background-color:#f9fafb">
+{{template "admin/admin_header.html" .}}
+<div class="flex-1" style="background-color: #f9fafb;">
+<div class="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
+        <div>
+            <h1 class="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+                <span class="iconify" data-icon="mdi:book-open-outline" data-width="20"></span>知识库管理
+            </h1>
+            <p class="text-xs sm:text-sm text-gray-500 mt-1">发布帮助文档与常见问题，用户可在前台查看。</p>
+        </div>
+        <button onclick="showEditModal()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">新建文章</button>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 mb-4">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+            <select id="filterStatus" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px]">
+                <option value="">全部状态</option>
+                <option value="published">已发布</option>
+                <option value="draft">草稿</option>
+            </select>
+            <button onclick="loadArticles()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">查询</button>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead>
+                <tr class="bg-gray-50 text-gray-600">
+                    <th class="px-4 py-3 text-left font-medium">ID</th>
+                    <th class="px-4 py-3 text-left font-medium">标题</th>
+                    <th class="px-4 py-3 text-left font-medium">分类</th>
+                    <th class="px-4 py-3 text-left font-medium">排序</th>
+                    <th class="px-4 py-3 text-left font-medium">状态</th>
+                    <th class="px-4 py-3 text-left font-medium">创建时间</th>
+                    <th class="px-4 py-3 text-right font-medium">操作</th>
+                </tr>
+            </thead>
+            <tbody id="articleTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 编辑弹窗 -->
+<div id="editModal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background-color: rgba(0,0,0,0.5);">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
+            <h3 id="modalTitle" class="text-lg font-semibold text-gray-800">新建文章</h3>
+            <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div class="p-4 space-y-4">
+            <input type="hidden" id="editId">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">标题 <span class="text-red-500">*</span></label>
+                <input type="text" id="editTitle" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="文章标题">
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">分类</label>
+                    <input type="text" id="editCategory" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="如：新手指南">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">排序（越小越靠前）</label>
+                    <input type="number" id="editSort" value="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">状态</label>
+                <select id="editStatus" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="published">已发布</option>
+                    <option value="draft">草稿</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">内容 <span class="text-red-500">*</span></label>
+                <textarea id="editContent" rows="10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="支持纯文本 / HTML"></textarea>
+            </div>
+        </div>
+        <div class="flex justify-end gap-2 p-4 border-t bg-gray-50 rounded-b-lg sticky bottom-0">
+            <button onclick="closeModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg">取消</button>
+            <button onclick="saveArticle()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">保存</button>
+        </div>
+    </div>
+</div>
+
+<script>
+var API = '/api/admin/knowledge';
+
+function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+function fmtTime(s) {
+    if (!s) return '-';
+    return String(s).replace('T', ' ').substring(0, 19);
+}
+function statusBadge(s) {
+    if (s === 'published') return '<span class="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">已发布</span>';
+    return '<span class="px-2 py-0.5 rounded-full text-xs bg-gray-200 text-gray-600">草稿</span>';
+}
+
+function loadArticles() {
+    $.get(API, function (r) {
+        if (r.code !== 200) { alert(r.msg || '加载失败'); return; }
+        var list = r.data || [];
+        var status = document.getElementById('filterStatus').value;
+        if (status) list = list.filter(function (a) { return a.status === status; });
+        renderArticles(list);
+    });
+}
+
+function renderArticles(list) {
+    var html = '';
+    if (!list.length) {
+        html = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">暂无文章</td></tr>';
+    }
+    list.forEach(function (a) {
+        var id = a.id || a.ID;
+        html += '<tr class="border-t hover:bg-gray-50">' +
+            '<td class="px-4 py-3 text-gray-500">' + id + '</td>' +
+            '<td class="px-4 py-3 font-medium text-gray-800">' + esc(a.title) + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + esc(a.category || '-') + '</td>' +
+            '<td class="px-4 py-3 text-gray-600">' + (a.sort || 0) + '</td>' +
+            '<td class="px-4 py-3">' + statusBadge(a.status) + '</td>' +
+            '<td class="px-4 py-3 text-gray-500 text-xs">' + fmtTime(a.created_at || a.CreatedAt) + '</td>' +
+            '<td class="px-4 py-3 text-right whitespace-nowrap">' +
+                '<button onclick="showEditModal(' + id + ')" class="text-blue-600 hover:underline text-sm mr-3">编辑</button>' +
+                '<button onclick="delArticle(' + id + ')" class="text-red-500 hover:underline text-sm">删除</button>' +
+            '</td></tr>';
+    });
+    document.getElementById('articleTable').innerHTML = html;
+}
+
+function showEditModal(id) {
+    document.getElementById('editId').value = '';
+    document.getElementById('editTitle').value = '';
+    document.getElementById('editCategory').value = '';
+    document.getElementById('editSort').value = '0';
+    document.getElementById('editStatus').value = 'published';
+    document.getElementById('editContent').value = '';
+    document.getElementById('modalTitle').textContent = '新建文章';
+    if (id) {
+        $.get(API + '/' + id, function (r) {
+            // 后台列表接口返回数组，这里用列表数据填充
+            document.getElementById('modalTitle').textContent = '编辑文章';
+        });
+        // 从当前列表取
+        $.get(API, function (r) {
+            if (r.code === 200) {
+                var a = (r.data || []).find(function (x) { return (x.id || x.ID) == id; });
+                if (a) {
+                    document.getElementById('editId').value = id;
+                    document.getElementById('editTitle').value = a.title || '';
+                    document.getElementById('editCategory').value = a.category || '';
+                    document.getElementById('editSort').value = a.sort || 0;
+                    document.getElementById('editStatus').value = a.status || 'published';
+                    document.getElementById('editContent').value = a.content || '';
+                    document.getElementById('modalTitle').textContent = '编辑文章';
+                }
+            }
+        });
+    }
+    var m = document.getElementById('editModal');
+    m.classList.remove('hidden');
+    m.classList.add('flex');
+}
+
+function closeModal() {
+    var m = document.getElementById('editModal');
+    m.classList.add('hidden');
+    m.classList.remove('flex');
+}
+
+function saveArticle() {
+    var id = document.getElementById('editId').value;
+    var data = {
+        title: document.getElementById('editTitle').value.trim(),
+        category: document.getElementById('editCategory').value.trim(),
+        sort: parseInt(document.getElementById('editSort').value) || 0,
+        status: document.getElementById('editStatus').value,
+        content: document.getElementById('editContent').value
+    };
+    if (!data.title) { alert('标题不能为空'); return; }
+    if (!data.content) { alert('内容不能为空'); return; }
+    var method = id ? 'PUT' : 'POST';
+    var url = id ? API + '/' + id : API;
+    $.ajax({
+        url: url, type: method,
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function (r) {
+            if (r.code === 200) { closeModal(); loadArticles(); }
+            else alert(r.msg || '保存失败');
+        },
+        error: function () { alert('请求失败'); }
+    });
+}
+
+function delArticle(id) {
+    if (!confirm('确定删除这篇文章吗？')) return;
+    $.ajax({
+        url: API + '/' + id, type: 'DELETE',
+        success: function (r) {
+            if (r.code === 200) loadArticles();
+            else alert(r.msg || '删除失败');
+        },
+        error: function () { alert('请求失败'); }
+    });
+}
+
+loadArticles();
+</script>
+{{template "admin/admin_footer.html" .}}
+</div>
+</div>
+</body>
+</html>

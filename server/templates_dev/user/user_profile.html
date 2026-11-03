@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    {{if .FaviconUrl}}<link rel="icon" href="{{.FaviconUrl}}">{{end}}
+    {{if .UseLocalCDN}}
+    <link href="/static/css/daisyui.min.css" rel="stylesheet">
+    <script src="/static/js/tailwindcss.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+    {{else}}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {{end}}
+</head>
+<body class="min-h-screen flex flex-col" style="background-color:#f9fafb">
+{{template "user/user_header.html" .}}
+<div class="flex-1" style="background-color: #f9fafb;">
+<div class="max-w-2xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+    <h1 class="text-lg sm:text-xl font-bold text-gray-800 mb-4">个人资料</h1>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
+        <h2 class="text-sm font-bold text-gray-800 mb-3">基本信息</h2>
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">用户名（不可修改）</label>
+                <input id="username" type="text" disabled class="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 w-full" />
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">昵称</label>
+                <input id="nickname" type="text" placeholder="设置一个昵称" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white w-full outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">邮箱</label>
+                <input id="email" type="email" placeholder="your@email.com" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white w-full outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <button onclick="saveProfile()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition">保存资料</button>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <h2 class="text-sm font-bold text-gray-800 mb-3">修改密码</h2>
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">旧密码</label>
+                <input id="oldPassword" type="password" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white w-full outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">新密码（至少 6 位）</label>
+                <input id="newPassword" type="password" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white w-full outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <button onclick="changePassword()" class="px-4 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition">修改密码</button>
+        </div>
+    </div>
+</div>
+
+<script>
+var API = '/api/user';
+function loadProfile() {
+    $.get(API + '/profile', function (r) {
+        if (r.code === 200) {
+            var d = r.data || {};
+            $('#username').val(d.username || '');
+            $('#nickname').val(d.nickname || '');
+            $('#email').val(d.email || '');
+        }
+    });
+}
+function saveProfile() {
+    $.ajax({
+        url: API + '/profile',
+        type: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify({ nickname: $('#nickname').val(), email: $('#email').val() }),
+        success: function (r) {
+            if (r.code === 200) { alert('保存成功'); }
+            else { alert(r.msg || '保存失败'); }
+        },
+        error: function () { alert('请求失败'); }
+    });
+}
+function changePassword() {
+    var oldp = $('#oldPassword').val(), newp = $('#newPassword').val();
+    if (!oldp || !newp) { alert('请填写旧密码和新密码'); return; }
+    if (newp.length < 6) { alert('新密码至少 6 位'); return; }
+    $.ajax({
+        url: API + '/profile/password',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ old_password: oldp, new_password: newp }),
+        success: function (r) {
+            if (r.code === 200) {
+                alert('密码修改成功');
+                $('#oldPassword').val(''); $('#newPassword').val('');
+            } else { alert(r.msg || '修改失败'); }
+        },
+        error: function () { alert('请求失败'); }
+    });
+}
+loadProfile();
+</script>
+</div>
+</div>
+{{template "user/user_footer.html" .}}
+</body>
+</html>

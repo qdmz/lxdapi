@@ -51,7 +51,7 @@ import (
 var embeddedFiles embed.FS
 
 // Version 版本号
-var Version = "0.08"
+var Version = "0.09"
 
 func main() {
 	if err := core.LoadConfig("configs/config.yaml"); err != nil {

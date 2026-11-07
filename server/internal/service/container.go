@@ -597,7 +597,9 @@ func (s *ContainerService) Reinstall(ctx context.Context, name, image, password 
 func (s *ContainerService) Delete(ctx context.Context, name string) error {
 	s.routeClientForContainer(name)
 	var container models.Container
+	containerFound := false
 	if err := db.DB.Where("name = ?", name).First(&container).Error; err == nil {
+		containerFound = true
 		var traffic models.Traffic
 		if err := db.DB.Where("container_name = ?", name).First(&traffic).Error; err == nil && traffic.TotalGB > 0 {
 			db.DB.Model(&models.User{}).Where("username = ?", container.UserID).
@@ -647,6 +649,24 @@ func (s *ContainerService) Delete(ctx context.Context, name string) error {
 
 	db.DB.Unscoped().Where("name = ?", name).Delete(&models.Container{})
 	db.DB.Unscoped().Where("container_name = ?", name).Delete(&models.Traffic{})
+
+	// 回补库存：开通成功时扣减过库存的订单，在容器删除后把数量加回产品库存，
+	// 与 provision.go 的扣减逻辑对称。仅当本次删除前容器记录存在时执行，
+	// 避免删除任务重试时重复回补；产品为不限库存（stock < 0）时不处理。
+	if containerFound {
+		var order models.Order
+		if err := db.DB.Where("container_name = ? AND provision_status = ?", name, "success").
+			Order("id ASC").First(&order).Error; err == nil && order.ProductID != 0 && order.Quantity > 0 {
+			var product models.Product
+			if err := db.DB.First(&product, order.ProductID).Error; err == nil && product.Stock >= 0 {
+				if err := db.DB.Model(&product).Update("stock", gorm.Expr("stock + ?", order.Quantity)).Error; err != nil {
+					logger.Warn("回补产品库存失败 产品ID=%d: %v", order.ProductID, err)
+				} else {
+					logger.OK("已回补产品库存: %s +%d", product.Name, order.Quantity)
+				}
+			}
+		}
+	}
 
 	if err := DeleteContainerCredential(name); err != nil {
 		logger.Warn("删除容器凭证失败: %v", err)
